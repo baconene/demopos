@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { usePage } from '@inertiajs/vue3';
 
-const page = usePage();
-const id = page.props.route.params.id || '1';
+const props = defineProps<{ id: string }>();
+const id = props.id || '1';
 </script>
 
 <template>
