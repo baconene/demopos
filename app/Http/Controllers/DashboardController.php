@@ -1,0 +1,78 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Ingredient;
+use App\Models\Order;
+use App\Services\InventoryService;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class DashboardController extends Controller
+{
+    public function __construct(private InventoryService $inventoryService) {}
+
+    public function index(): Response
+    {
+        $user = auth()->user();
+        $stats = $this->buildStats($user);
+
+        return Inertia::render('Dashboard', [
+            'stats' => $stats,
+            'recentOrders' => $this->recentOrders(),
+        ]);
+    }
+
+    private function buildStats($user): array
+    {
+        $stats = [];
+
+        if ($user->hasAnyRole(['admin', 'cashier'])) {
+            $stats['today_orders'] = Order::whereDate('created_at', today())->count();
+            $stats['today_revenue'] = (float) Order::whereDate('created_at', today())
+                ->where('payment_status', 'paid')
+                ->sum('total_amount');
+            $stats['active_orders'] = Order::whereIn('status', ['pending', 'preparing'])->count();
+        }
+
+        if ($user->hasAnyRole(['admin', 'kitchen'])) {
+            $stats['pending_orders'] = Order::where('status', 'pending')->count();
+            $stats['preparing_orders'] = Order::where('status', 'preparing')->count();
+            $stats['ready_orders'] = Order::where('status', 'ready')->count();
+        }
+
+        if ($user->hasAnyRole(['admin', 'auditor'])) {
+            $stats['low_stock_count'] = Ingredient::whereColumn('current_quantity', '<=', 'min_quantity')
+                ->where('is_active', true)
+                ->count();
+            $stats['total_ingredients'] = Ingredient::where('is_active', true)->count();
+        }
+
+        return $stats;
+    }
+
+    private function recentOrders(): array
+    {
+        $user = auth()->user();
+
+        if (! $user->hasAnyRole(['admin', 'cashier', 'kitchen', 'auditor'])) {
+            return [];
+        }
+
+        return Order::with(['items.product', 'queueNumber'])
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($order) => [
+                'id' => $order->id,
+                'queue_number' => $order->queueNumber?->number,
+                'order_type' => $order->order_type,
+                'status' => $order->status,
+                'total_amount' => (float) $order->total_amount,
+                'payment_status' => $order->payment_status,
+                'items_count' => $order->items->count(),
+                'created_at' => $order->created_at?->toDateTimeString(),
+            ])
+            ->toArray();
+    }
+}

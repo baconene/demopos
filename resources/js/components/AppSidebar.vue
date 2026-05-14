@@ -1,42 +1,51 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
-import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
-import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
+import { computed } from 'vue'
+import { Link, usePage } from '@inertiajs/vue3'
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-} from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+    LayoutGrid, ShoppingCart, ChefHat, Package, BarChart3, Users, Settings,
+} from 'lucide-vue-next'
+import AppLogo from '@/components/AppLogo.vue'
+import NavFooter from '@/components/NavFooter.vue'
+import NavMain from '@/components/NavMain.vue'
+import NavUser from '@/components/NavUser.vue'
+import {
+    Sidebar, SidebarContent, SidebarFooter, SidebarHeader,
+    SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+} from '@/components/ui/sidebar'
+import { dashboard } from '@/routes'
+import type { NavItem } from '@/types'
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+const page = usePage()
+const roles = computed<string[]>(() => page.props.auth?.roles ?? [])
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
-    },
-];
+const hasRole = (...r: string[]) => r.some((role) => roles.value.includes(role))
+
+const mainNavItems = computed<NavItem[]>(() => {
+    const items: NavItem[] = [
+        { title: 'Dashboard', href: dashboard().url, icon: LayoutGrid },
+    ]
+
+    if (hasRole('cashier', 'admin')) {
+        items.push({ title: 'Point of Sale', href: '/pos', icon: ShoppingCart })
+    }
+
+    if (hasRole('kitchen', 'admin')) {
+        items.push({ title: 'Kitchen Monitor', href: '/kitchen', icon: ChefHat })
+    }
+
+    if (hasRole('auditor', 'admin')) {
+        items.push({ title: 'Inventory', href: '/inventory', icon: Package })
+        items.push({ title: 'Reports', href: '/reports', icon: BarChart3 })
+    }
+
+    if (hasRole('admin')) {
+        items.push({ title: 'Settings', href: '/settings/profile', icon: Settings })
+    }
+
+    return items
+})
+
+const footerNavItems: NavItem[] = []
 </script>
 
 <template>
@@ -45,7 +54,7 @@ const footerNavItems: NavItem[] = [
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboard()">
+                        <Link :href="dashboard().url">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>

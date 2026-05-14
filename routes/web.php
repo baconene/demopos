@@ -3,6 +3,11 @@
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 use App\Http\Controllers\MenuController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\QueueMonitorController;
+use App\Http\Controllers\InventoryPageController;
+use App\Http\Controllers\ReportPageController;
 
 Route::inertia('/', 'Welcome', [
     'canRegister' => Features::enabled(Features::registration()),
@@ -13,7 +18,27 @@ Route::get('menu/{id}', [MenuController::class, 'show'])
     ->name('menu.show');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // POS (cashier)
+    Route::get('pos', [PosController::class, 'index'])
+        ->name('pos.index')
+        ->middleware('can:create orders');
+
+    // Kitchen monitor
+    Route::get('kitchen', [QueueMonitorController::class, 'index'])
+        ->name('kitchen.index')
+        ->middleware('can:update orders');
+
+    // Inventory management
+    Route::get('inventory', [InventoryPageController::class, 'index'])
+        ->name('inventory.index')
+        ->middleware('can:view inventory');
+
+    // Reports
+    Route::get('reports', [ReportPageController::class, 'index'])
+        ->name('reports.index')
+        ->middleware('can:view reports');
 });
 
 require __DIR__.'/settings.php';

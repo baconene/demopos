@@ -1,0 +1,114 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\QueueNumber;
+use App\Enums\OrderStatus;
+use Illuminate\Support\Facades\DB;
+
+class OrderService
+{
+    public function __construct(private InventoryService $inventoryService) {}
+
+    public function createOrder(array $data): Order
+    {
+        return DB::transaction(function () use ($data) {
+            $order = Order::create([
+                'user_id' => auth()->id(),
+                'order_type' => $data['order_type'],
+                'table_number' => $data['table_number'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'discount_amount' => $data['discount_amount'] ?? 0,
+                'status' => OrderStatus::PENDING->value,
+                'payment_status' => 'pending',
+            ]);
+
+            // Generate queue number for dine_in and takeout
+            if (in_array($order->order_type, ['dine_in', 'takeout'])) {
+                $queueNumber = QueueNumber::create(['number' => $this->generateQueueNumber()]);
+                $order->update(['queue_number_id' => $queueNumber->id]);
+            }
+
+            // Add items
+            if (isset($data['items']) && is_array($data['items'])) {
+                foreach ($data['items'] as $item) {
+                    $this->addOrderItem($order, $item);
+                }
+            }
+
+            $order->calculateTotals();
+
+            return $order;
+        });
+    }
+
+    public function addOrderItem(Order $order, array $itemData): OrderItem
+    {
+        return DB::transaction(function () use ($order, $itemData) {
+            $product = \App\Models\Product::findOrFail($itemData['product_id']);
+            $quantity = $itemData['quantity'] ?? 1;
+
+            // Check inventory availability
+            $orderItem = new OrderItem([
+                'product_id' => $product->id,
+                'quantity' => $quantity,
+                'unit_price' => $product->price,
+            ]);
+
+            if (!$this->inventoryService->checkAvailability($orderItem)) {
+                throw new \Exception("Insufficient inventory for {$product->name}");
+            }
+
+            $orderItem->order_id = $order->id;
+            $orderItem->calculateSubtotal();
+            $orderItem->save();
+
+            // Add modifiers if any
+            if (isset($itemData['modifiers']) && is_array($itemData['modifiers'])) {
+                foreach ($itemData['modifiers'] as $modifierId) {
+                    \App\Models\OrderItemModifier::create([
+                        'order_item_id' => $orderItem->id,
+                        'modifier_id' => $modifierId,
+                        'price' => \App\Models\Modifier::find($modifierId)->price ?? 0,
+                    ]);
+                }
+            }
+
+            return $orderItem->fresh();
+        });
+    }
+
+    public function updateOrderStatus(Order $order, OrderStatus $status): Order
+    {
+        $order->update(['status' => $status->value]);
+
+        if ($status === OrderStatus::COMPLETED) {
+            $order->update(['completed_at' => now()]);
+        }
+
+        return $order;
+    }
+
+    public function generateQueueNumber(): int
+    {
+        $latest = QueueNumber::orderByDesc('number')->first();
+
+        return ($latest?->number ?? 0) + 1;
+    }
+
+    public function cancelOrder(Order $order, ?string $reason = null): Order
+    {
+        return DB::transaction(function () use ($order, $reason) {
+            $order->items()->update(['status' => 'cancelled']);
+            $order->update([
+                'status' => OrderStatus::CANCELLED->value,
+                'payment_status' => 'cancelled',
+                'notes' => ($order->notes ? $order->notes . ' | ' : '') . 'Cancelled: ' . $reason,
+            ]);
+
+            return $order;
+        });
+    }
+}

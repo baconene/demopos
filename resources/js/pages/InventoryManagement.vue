@@ -1,0 +1,295 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { Head, router } from '@inertiajs/vue3'
+import { toast } from 'vue-sonner'
+import api from '@/utils/api'
+import { AlertTriangle, Package, RefreshCw, X } from 'lucide-vue-next'
+
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Dashboard', href: '/dashboard' },
+            { title: 'Inventory', href: '/inventory' },
+        ],
+    },
+})
+
+interface Ingredient {
+    id: number; name: string; unit: string
+    current_quantity: number; min_quantity: number; cost_per_unit: number; is_low_stock: boolean
+}
+interface Transaction {
+    id: number; ingredient_name: string; type: string; quantity: number
+    old_quantity: number; new_quantity: number; user_name: string; notes: string | null; created_at: string
+}
+
+const props = defineProps<{ ingredients: Ingredient[]; recentTransactions: Transaction[] }>()
+
+const search = ref('')
+const selectedItem = ref<Ingredient | null>(null)
+const adjustType = ref('stock_in')
+const adjustQty = ref<number>(0)
+const adjustNotes = ref('')
+const submitting = ref(false)
+const showLowOnly = ref(false)
+
+const filtered = computed(() => {
+    let list = props.ingredients
+    if (showLowOnly.value) list = list.filter((i) => i.is_low_stock)
+    if (search.value.trim()) {
+        const q = search.value.toLowerCase()
+        list = list.filter((i) => i.name.toLowerCase().includes(q))
+    }
+    return list
+})
+
+const lowCount = computed(() => props.ingredients.filter((i) => i.is_low_stock).length)
+
+const openAdjust = (item: Ingredient) => {
+    selectedItem.value = item
+    adjustType.value = 'stock_in'
+    adjustQty.value = 0
+    adjustNotes.value = ''
+}
+
+const submitAdjustment = async () => {
+    if (!selectedItem.value || adjustQty.value <= 0) {
+        toast.warning('Enter a quantity greater than 0')
+        return
+    }
+    submitting.value = true
+    try {
+        await api.post('/api/v1/inventory/adjust', {
+            ingredient_id: selectedItem.value.id,
+            type: adjustType.value,
+            quantity: adjustQty.value,
+            notes: adjustNotes.value,
+        })
+        toast.success(`${selectedItem.value.name} adjusted successfully`)
+        selectedItem.value = null
+        router.reload({ only: ['ingredients', 'recentTransactions'] })
+    } catch (err: any) {
+        toast.error(err.response?.data?.message ?? 'Adjustment failed')
+    } finally {
+        submitting.value = false
+    }
+}
+
+const typeLabel: Record<string, string> = {
+    stock_in: 'Stock In', stock_out: 'Stock Out',
+    adjustment: 'Adjustment', waste: 'Waste', usage: 'Usage', purchase: 'Purchase',
+}
+const typeColor: Record<string, string> = {
+    stock_in: 'text-green-600', stock_out: 'text-red-600',
+    waste: 'text-orange-600', adjustment: 'text-blue-600', usage: 'text-yellow-600', purchase: 'text-purple-600',
+}
+</script>
+
+<template>
+    <Head title="Inventory Management" />
+
+    <div class="space-y-6">
+        <!-- Low Stock Alert Banner -->
+        <div v-if="lowCount > 0" class="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-4">
+            <AlertTriangle class="h-5 w-5 text-red-500 shrink-0" />
+            <div class="flex-1">
+                <p class="font-semibold text-red-700 dark:text-red-400 text-sm">
+                    {{ lowCount }} ingredient{{ lowCount > 1 ? 's are' : ' is' }} below minimum stock level
+                </p>
+                <p class="text-xs text-red-600/70 dark:text-red-400/70">Review and restock as needed</p>
+            </div>
+            <button @click="showLowOnly = !showLowOnly" class="text-xs underline text-red-700 dark:text-red-400 shrink-0">
+                {{ showLowOnly ? 'Show all' : 'Show only low stock' }}
+            </button>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center gap-3 flex-wrap">
+            <input
+                v-model="search"
+                type="text"
+                placeholder="Search ingredients…"
+                class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary flex-1 min-w-48"
+            />
+            <button
+                @click="router.reload()"
+                class="rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted flex items-center gap-1.5"
+            >
+                <RefreshCw class="h-3.5 w-3.5" /> Refresh
+            </button>
+        </div>
+
+        <!-- Inventory Table -->
+        <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
+                        <tr>
+                            <th class="px-4 py-3 text-left">Ingredient</th>
+                            <th class="px-4 py-3 text-left">Unit</th>
+                            <th class="px-4 py-3 text-right">Current Stock</th>
+                            <th class="px-4 py-3 text-right">Minimum</th>
+                            <th class="px-4 py-3 text-right">Cost/Unit</th>
+                            <th class="px-4 py-3 text-center">Status</th>
+                            <th class="px-4 py-3 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="item in filtered" :key="item.id" :class="['hover:bg-muted/20', item.is_low_stock ? 'bg-red-50/50 dark:bg-red-950/10' : '']">
+                            <td class="px-4 py-3 font-medium flex items-center gap-2">
+                                <Package class="h-4 w-4 text-muted-foreground shrink-0" />
+                                {{ item.name }}
+                            </td>
+                            <td class="px-4 py-3 text-muted-foreground">{{ item.unit }}</td>
+                            <td class="px-4 py-3 text-right font-bold" :class="item.is_low_stock ? 'text-red-600' : ''">
+                                {{ item.current_quantity.toFixed(2) }}
+                            </td>
+                            <td class="px-4 py-3 text-right text-muted-foreground">{{ item.min_quantity.toFixed(2) }}</td>
+                            <td class="px-4 py-3 text-right text-muted-foreground">₱{{ item.cost_per_unit.toFixed(2) }}</td>
+                            <td class="px-4 py-3 text-center">
+                                <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', item.is_low_stock ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300']">
+                                    {{ item.is_low_stock ? 'Low Stock' : 'OK' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <button
+                                    @click="openAdjust(item)"
+                                    class="rounded-lg bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
+                                >
+                                    Adjust
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="filtered.length === 0">
+                            <td colspan="7" class="px-4 py-10 text-center text-muted-foreground text-sm">
+                                No ingredients found.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div class="p-4 border-b">
+                <h2 class="font-semibold text-sm">Recent Transactions</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
+                        <tr>
+                            <th class="px-4 py-3 text-left">Ingredient</th>
+                            <th class="px-4 py-3 text-left">Type</th>
+                            <th class="px-4 py-3 text-right">Qty</th>
+                            <th class="px-4 py-3 text-right">Before → After</th>
+                            <th class="px-4 py-3 text-left">By</th>
+                            <th class="px-4 py-3 text-left">Notes</th>
+                            <th class="px-4 py-3 text-left">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="tx in recentTransactions" :key="tx.id" class="hover:bg-muted/20">
+                            <td class="px-4 py-2 font-medium">{{ tx.ingredient_name }}</td>
+                            <td class="px-4 py-2">
+                                <span :class="['text-xs font-semibold', typeColor[tx.type] ?? 'text-muted-foreground']">
+                                    {{ typeLabel[tx.type] ?? tx.type }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-2 text-right font-bold">{{ tx.quantity }}</td>
+                            <td class="px-4 py-2 text-right text-xs text-muted-foreground">
+                                {{ tx.old_quantity.toFixed(2) }} → {{ tx.new_quantity.toFixed(2) }}
+                            </td>
+                            <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.user_name ?? '—' }}</td>
+                            <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.notes ?? '—' }}</td>
+                            <td class="px-4 py-2 text-muted-foreground text-xs">
+                                {{ tx.created_at ? new Date(tx.created_at).toLocaleString() : '—' }}
+                            </td>
+                        </tr>
+                        <tr v-if="recentTransactions.length === 0">
+                            <td colspan="7" class="px-4 py-8 text-center text-muted-foreground text-sm">
+                                No recent transactions.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adjustment Modal -->
+    <Teleport to="body">
+        <Transition name="fade">
+            <div
+                v-if="selectedItem"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                @click.self="selectedItem = null"
+            >
+                <div class="w-full max-w-md rounded-2xl bg-background shadow-2xl">
+                    <div class="p-5 border-b flex items-start justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold">Adjust Stock</h3>
+                            <p class="text-sm text-muted-foreground">{{ selectedItem.name }}</p>
+                        </div>
+                        <button @click="selectedItem = null" class="rounded-full p-1 hover:bg-muted">
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div class="rounded-lg bg-muted/40 p-3 text-sm flex justify-between">
+                            <span class="text-muted-foreground">Current Stock</span>
+                            <span class="font-bold">{{ selectedItem.current_quantity.toFixed(2) }} {{ selectedItem.unit }}</span>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Adjustment Type</label>
+                            <select v-model="adjustType" class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="stock_in">Stock In (Add)</option>
+                                <option value="stock_out">Stock Out (Remove)</option>
+                                <option value="adjustment">Manual Adjustment (Set to)</option>
+                                <option value="waste">Waste (Deduct)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">
+                                {{ adjustType === 'adjustment' ? 'New Quantity' : 'Quantity' }}
+                                ({{ selectedItem.unit }})
+                            </label>
+                            <input
+                                v-model.number="adjustQty"
+                                type="number" min="0" step="0.01"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Notes (optional)</label>
+                            <textarea
+                                v-model="adjustNotes"
+                                rows="2"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                                placeholder="Reason for adjustment…"
+                            />
+                        </div>
+                    </div>
+                    <div class="p-5 border-t flex gap-3">
+                        <button @click="selectedItem = null" class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">
+                            Cancel
+                        </button>
+                        <button
+                            @click="submitAdjustment"
+                            :disabled="submitting"
+                            class="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        >
+                            <RefreshCw v-if="submitting" class="inline h-3 w-3 animate-spin mr-1" />
+                            {{ submitting ? 'Saving…' : 'Save Adjustment' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
+</template>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>
