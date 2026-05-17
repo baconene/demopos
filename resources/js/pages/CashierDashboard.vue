@@ -169,7 +169,7 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
         </div>
 
         <!-- RIGHT: Cart (desktop sidebar only) -->
-        <div class="hidden lg:flex flex-col rounded-xl border bg-card shadow-sm overflow-hidden sticky top-4 max-h-[calc(100vh-6rem)]">
+        <div class="hidden lg:flex flex-col rounded-xl border bg-card shadow-sm overflow-hidden sticky top-4 h-[calc(100vh-6rem)]">
             <div class="p-4 border-b flex items-center gap-2">
                 <ShoppingCart class="h-5 w-5" />
                 <h2 class="font-bold text-base">Order Cart</h2>
