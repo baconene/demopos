@@ -113,7 +113,7 @@ class OrderService
             $order->items()->update(['status' => 'cancelled']);
             $order->update([
                 'status' => OrderStatus::CANCELLED->value,
-                'payment_status' => 'cancelled',
+                'payment_status' => 'voided',
                 'notes' => ($order->notes ? $order->notes . ' | ' : '') . 'Cancelled: ' . $reason,
             ]);
 

@@ -39,7 +39,7 @@ class PaymentService {
                 ->sum('amount');
 
             if ($totalPaid >= $order->total_amount) {
-                $order->update(['payment_status' => PaymentStatus::COMPLETED->value]);
+                $order->update(['payment_status' => 'paid']);
             }
 
             return $payment;
@@ -56,7 +56,7 @@ class PaymentService {
                 'reason'     => $refundData['reason'] ?? null,
             ]);
             $payment->update(['status' => PaymentStatus::REFUNDED->value]);
-            $payment->order->update(['payment_status' => PaymentStatus::REFUNDED->value]);
+            $payment->order->update(['payment_status' => 'refunded']);
             return $refund;
         });
     }
