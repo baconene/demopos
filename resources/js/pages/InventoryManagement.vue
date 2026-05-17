@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { AlertTriangle, Package, RefreshCw, X } from 'lucide-vue-next'
+import { AlertTriangle, Package, RefreshCw, X, Plus } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -75,6 +75,34 @@ const submitAdjustment = async () => {
     }
 }
 
+// ─── Add Ingredient ───────────────────────────────────────────────────────────
+const showAddIngredient = ref(false)
+const addingIngredient  = ref(false)
+const newIngredient = ref({ name: '', unit: '', current_quantity: 0, min_quantity: 0 })
+
+const openAddIngredient = () => {
+    newIngredient.value = { name: '', unit: '', current_quantity: 0, min_quantity: 0 }
+    showAddIngredient.value = true
+}
+
+const submitAddIngredient = async () => {
+    if (!newIngredient.value.name || !newIngredient.value.unit) {
+        toast.warning('Name and unit are required')
+        return
+    }
+    addingIngredient.value = true
+    try {
+        await api.post('/api/v1/inventory', newIngredient.value)
+        toast.success(`${newIngredient.value.name} added to inventory`)
+        showAddIngredient.value = false
+        router.reload({ only: ['ingredients'] })
+    } catch (err: any) {
+        toast.error(err.response?.data?.message ?? 'Failed to add ingredient')
+    } finally {
+        addingIngredient.value = false
+    }
+}
+
 const typeLabel: Record<string, string> = {
     stock_in: 'Stock In', stock_out: 'Stock Out',
     adjustment: 'Adjustment', waste: 'Waste', usage: 'Usage', purchase: 'Purchase',
@@ -116,6 +144,12 @@ const typeColor: Record<string, string> = {
                 class="rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted flex items-center gap-1.5"
             >
                 <RefreshCw class="h-3.5 w-3.5" /> Refresh
+            </button>
+            <button
+                @click="openAddIngredient"
+                class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+                <Plus class="h-3.5 w-3.5" /> Add Ingredient
             </button>
         </div>
 
@@ -216,6 +250,60 @@ const typeColor: Record<string, string> = {
             </div>
         </div>
     </div>
+
+    <!-- Add Ingredient Modal -->
+    <Teleport to="body">
+        <Transition name="fade">
+            <div
+                v-if="showAddIngredient"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                @click.self="showAddIngredient = false"
+            >
+                <div class="w-full max-w-md rounded-2xl bg-background shadow-2xl">
+                    <div class="p-5 border-b flex items-center justify-between">
+                        <h3 class="text-lg font-bold">Add Ingredient</h3>
+                        <button @click="showAddIngredient = false" class="rounded-full p-1 hover:bg-muted">
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Name *</label>
+                            <input v-model="newIngredient.name" type="text" placeholder="e.g. Pork Ribs"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Unit *</label>
+                            <input v-model="newIngredient.unit" type="text" placeholder="e.g. kg, pcs, liters"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs font-medium text-muted-foreground block mb-1.5">Starting Stock</label>
+                                <input v-model.number="newIngredient.current_quantity" type="number" min="0" step="0.01"
+                                    class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                            </div>
+                            <div>
+                                <label class="text-xs font-medium text-muted-foreground block mb-1.5">Minimum Stock</label>
+                                <input v-model.number="newIngredient.min_quantity" type="number" min="0" step="0.01"
+                                    class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-5 border-t flex gap-3">
+                        <button @click="showAddIngredient = false"
+                            class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">
+                            Cancel
+                        </button>
+                        <button @click="submitAddIngredient" :disabled="addingIngredient"
+                            class="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                            {{ addingIngredient ? 'Adding…' : 'Add Ingredient' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
 
     <!-- Adjustment Modal -->
     <Teleport to="body">

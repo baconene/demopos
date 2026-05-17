@@ -5,8 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
+use App\Models\Recipe;
 use App\Repositories\ProductRepository;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Arr;
 
 class ProductController extends Controller
 {
@@ -14,33 +18,111 @@ class ProductController extends Controller
 
     public function index(): JsonResponse
     {
-        $products = $this->productRepository->getActive();
-
-        return response()->json(ProductResource::collection($products));
+        return response()->json(ProductResource::collection($this->productRepository->getActive()));
     }
 
     public function byCategory(int $categoryId): JsonResponse
     {
-        $products = $this->productRepository->getByCategoryId($categoryId);
-
-        return response()->json(ProductResource::collection($products));
+        return response()->json(ProductResource::collection($this->productRepository->getByCategoryId($categoryId)));
     }
 
     public function search(): JsonResponse
     {
         $query = request()->input('q');
-
-        if (empty($query)) {
-            return response()->json([]);
-        }
-
-        $products = $this->productRepository->search($query);
-
-        return response()->json(ProductResource::collection($products));
+        if (empty($query)) return response()->json([]);
+        return response()->json(ProductResource::collection($this->productRepository->search($query)));
     }
 
-    public function show(Product $product): JsonResource
+    public function show(Product $product): JsonResponse
     {
         return response()->json(new ProductResource($product->load('category', 'modifiers')));
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $this->adminOnly();
+
+        $data = $request->validate([
+            'category_id'             => 'required|exists:categories,id',
+            'name'                    => 'required|string|max:255',
+            'sku'                     => 'nullable|string|max:100|unique:products,sku',
+            'description'             => 'nullable|string',
+            'price'                   => 'required|numeric|min:0',
+            'cost'                    => 'nullable|numeric|min:0',
+            'is_active'               => 'boolean',
+            'display_order'           => 'nullable|integer|min:0',
+            'recipes'                 => 'nullable|array',
+            'recipes.*.ingredient_id' => 'required|exists:ingredients,id',
+            'recipes.*.quantity'      => 'required|numeric|min:0.001',
+            'recipes.*.unit'          => 'nullable|string|max:50',
+        ]);
+
+        $product = Product::create(Arr::except($data, ['recipes']));
+
+        foreach ($data['recipes'] ?? [] as $row) {
+            Recipe::create([
+                'product_id'    => $product->id,
+                'ingredient_id' => $row['ingredient_id'],
+                'quantity'      => $row['quantity'],
+                'unit'          => $row['unit'] ?? null,
+            ]);
+        }
+
+        return response()->json(
+            new ProductResource($product->load('category', 'modifiers', 'recipes.ingredient')),
+            201
+        );
+    }
+
+    public function update(Request $request, Product $product): JsonResponse
+    {
+        $this->adminOnly();
+
+        $data = $request->validate([
+            'category_id'             => 'sometimes|exists:categories,id',
+            'name'                    => 'sometimes|string|max:255',
+            'sku'                     => 'nullable|string|max:100|unique:products,sku,' . $product->id,
+            'description'             => 'nullable|string',
+            'price'                   => 'sometimes|numeric|min:0',
+            'cost'                    => 'nullable|numeric|min:0',
+            'is_active'               => 'boolean',
+            'display_order'           => 'nullable|integer|min:0',
+            'recipes'                 => 'nullable|array',
+            'recipes.*.ingredient_id' => 'required|exists:ingredients,id',
+            'recipes.*.quantity'      => 'required|numeric|min:0.001',
+            'recipes.*.unit'          => 'nullable|string|max:50',
+        ]);
+
+        $product->update(Arr::except($data, ['recipes']));
+
+        if (array_key_exists('recipes', $data)) {
+            $product->recipes()->delete();
+            foreach ($data['recipes'] ?? [] as $row) {
+                Recipe::create([
+                    'product_id'    => $product->id,
+                    'ingredient_id' => $row['ingredient_id'],
+                    'quantity'      => $row['quantity'],
+                    'unit'          => $row['unit'] ?? null,
+                ]);
+            }
+        }
+
+        return response()->json(
+            new ProductResource($product->fresh()->load('category', 'modifiers', 'recipes.ingredient'))
+        );
+    }
+
+    public function destroy(Product $product): Response
+    {
+        $this->adminOnly();
+        $product->delete();
+        return response()->noContent();
+    }
+
+    private function adminOnly(): void
+    {
+        if (! auth()->user()?->hasAnyRole('admin')) {
+            abort(403, 'Only admins can manage products');
+        }
     }
 }

@@ -24,6 +24,11 @@ Route::prefix('v1')->group(function () {
 
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
+        // Products — write routes (read routes are public above)
+        Route::post('/products', [ProductController::class, 'store']);
+        Route::put('/products/{product}', [ProductController::class, 'update']);
+        Route::delete('/products/{product}', [ProductController::class, 'destroy']);
+
         // Orders — static sub-routes BEFORE apiResource to avoid {order} shadowing
         Route::get('/orders/active', [OrderController::class, 'activeOrders']);
         Route::get('/orders/queue', [OrderController::class, 'queueOrders']);
@@ -37,6 +42,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/payments/{payment}/refund', [PaymentController::class, 'refund']);
 
         // Inventory — static sub-routes BEFORE {ingredient}
+        Route::post('/inventory', [InventoryController::class, 'store']);
         Route::get('/inventory', [InventoryController::class, 'index']);
         Route::get('/inventory/low-stock', [InventoryController::class, 'lowStock']);
         Route::post('/inventory/adjust', [InventoryController::class, 'adjust']);

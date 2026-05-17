@@ -20,6 +20,29 @@ class InventoryController extends Controller
         $this->middleware('auth:sanctum');
     }
 
+    public function store(\Illuminate\Http\Request $request): JsonResponse
+    {
+        if (! auth()->user()?->hasAnyRole('admin', 'auditor')) {
+            abort(403, 'Unauthorized');
+        }
+
+        $data = $request->validate([
+            'name'             => 'required|string|max:255',
+            'unit'             => 'required|string|max:50',
+            'current_quantity' => 'required|numeric|min:0',
+            'min_quantity'     => 'required|numeric|min:0',
+            'track_inventory'  => 'boolean',
+        ]);
+
+        $ingredient = Ingredient::create([
+            ...$data,
+            'is_active'       => true,
+            'track_inventory' => $data['track_inventory'] ?? true,
+        ]);
+
+        return response()->json(new InventoryResource($ingredient), 201);
+    }
+
     public function index(): JsonResponse
     {
         $ingredients = $this->inventoryRepository->getAll();

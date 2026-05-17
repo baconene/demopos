@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\QueueMonitorController;
 use App\Http\Controllers\InventoryPageController;
+use App\Http\Controllers\ProductPageController;
 use App\Http\Controllers\ReportPageController;
 
 Route::inertia('/', 'Welcome', [
@@ -34,6 +35,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('inventory', [InventoryPageController::class, 'index'])
         ->name('inventory.index')
         ->middleware('can:view inventory');
+
+    // Product management (admin only)
+    Route::get('products', [ProductPageController::class, 'index'])
+        ->name('products.index')
+        ->middleware('role:admin');
 
     // Reports
     Route::get('reports', [ReportPageController::class, 'index'])
