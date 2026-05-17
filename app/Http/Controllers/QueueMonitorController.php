@@ -13,7 +13,7 @@ class QueueMonitorController extends Controller
     {
         $orders = $this->getActiveOrders();
 
-        $products = Product::where('is_available', true)
+        $products = Product::where('is_active', true)
             ->with('category')
             ->orderBy('name')
             ->get()
