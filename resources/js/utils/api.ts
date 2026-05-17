@@ -10,8 +10,12 @@ const api = axios.create({
     },
 })
 
-// Axios reads the XSRF-TOKEN cookie and sends it as X-XSRF-TOKEN automatically
-// when withCredentials is true — no manual token handling needed.
+api.interceptors.request.use((config) => {
+    if (config.data instanceof FormData) {
+        delete config.headers['Content-Type']
+    }
+    return config
+})
 
 api.interceptors.response.use(
     (response) => response,
