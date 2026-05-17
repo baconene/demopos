@@ -28,7 +28,7 @@ const cartStore = useCartStore()
 const page = usePage()
 const user = computed(() => page.props.auth?.user)
 
-const selectedCategoryId = ref<number | null>(props.categories[0]?.id ?? null)
+const selectedCategoryId = ref<number | null>(null)
 const searchQuery = ref('')
 const selectedProduct = ref<Product | null>(null)
 const productQty = ref(1)
@@ -117,6 +117,17 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
 
             <!-- Category Tabs -->
             <div class="flex gap-2 overflow-x-auto pb-1">
+                <button
+                    @click="selectedCategoryId = null; searchQuery = ''"
+                    :class="[
+                        'shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition',
+                        selectedCategoryId === null
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                    ]"
+                >
+                    All
+                </button>
                 <button
                     v-for="cat in categories"
                     :key="cat.id"
