@@ -57,6 +57,7 @@ class ProductController extends Controller
             'recipes.*.unit'          => 'nullable|string|max:50',
         ]);
 
+        $data['sku'] = $data['sku'] ?: null;
         $product = Product::create(Arr::except($data, ['recipes']));
 
         foreach ($data['recipes'] ?? [] as $row) {
@@ -93,6 +94,7 @@ class ProductController extends Controller
             'recipes.*.unit'          => 'nullable|string|max:50',
         ]);
 
+        $data['sku'] = $data['sku'] ?: null;
         $product->update(Arr::except($data, ['recipes']));
 
         if (array_key_exists('recipes', $data)) {
