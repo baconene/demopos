@@ -17,6 +17,11 @@ class InventoryService
 
         foreach ($recipes as $recipe) {
             $ingredient = $recipe->ingredient;
+
+            if (! $ingredient || ! $ingredient->track_inventory) {
+                continue;
+            }
+
             $requiredQuantity = $recipe->quantity * $orderItem->quantity;
 
             if ($ingredient->current_quantity < $requiredQuantity) {
@@ -69,6 +74,11 @@ class InventoryService
 
         foreach ($recipes as $recipe) {
             $ingredient = $recipe->ingredient;
+
+            if (! $ingredient || ! $ingredient->track_inventory) {
+                continue;
+            }
+
             $requiredQuantity = $recipe->quantity * $orderItem->quantity;
 
             if ($ingredient->current_quantity < $requiredQuantity) {

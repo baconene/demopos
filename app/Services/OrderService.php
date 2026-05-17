@@ -58,7 +58,7 @@ class OrderService
             ]);
 
             if (!$this->inventoryService->checkAvailability($orderItem)) {
-                throw new \Exception("Insufficient inventory for {$product->name}");
+                abort(422, "Insufficient inventory for {$product->name}");
             }
 
             $orderItem->order_id = $order->id;
