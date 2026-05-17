@@ -35,6 +35,7 @@ const productQty = ref(1)
 const selectedModifiers = ref<number[]>([])
 const submitting = ref(false)
 const lastOrderNumber = ref<number | null>(null)
+const cartOpen = ref(false)
 
 const filteredProducts = computed(() => {
     let list = props.products
@@ -66,6 +67,7 @@ const addToCart = () => {
     cartStore.addItem(selectedProduct.value, productQty.value, selectedModifiers.value)
     toast.success(`${selectedProduct.value.name} added to cart`)
     selectedProduct.value = null
+    if (window.innerWidth < 1024) cartOpen.value = true
 }
 
 const submitOrder = async () => {
@@ -103,7 +105,7 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <!-- LEFT: Product Browser -->
-        <div class="lg:col-span-2 space-y-4 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] lg:pr-1">
+        <div class="lg:col-span-2 space-y-4 pb-24 lg:pb-0 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] lg:pr-1">
             <!-- Search -->
             <div class="relative">
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -166,8 +168,8 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
             </p>
         </div>
 
-        <!-- RIGHT: Cart -->
-        <div class="flex flex-col rounded-xl border bg-card shadow-sm overflow-hidden sticky top-4 max-h-[calc(100vh-6rem)]">
+        <!-- RIGHT: Cart (desktop sidebar only) -->
+        <div class="hidden lg:flex flex-col rounded-xl border bg-card shadow-sm overflow-hidden sticky top-4 max-h-[calc(100vh-6rem)]">
             <div class="p-4 border-b flex items-center gap-2">
                 <ShoppingCart class="h-5 w-5" />
                 <h2 class="font-bold text-base">Order Cart</h2>
@@ -281,6 +283,132 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
         </div>
     </div>
 
+    <!-- Mobile: Floating Cart Button + Drawer -->
+    <Teleport to="body">
+        <!-- FAB -->
+        <button
+            @click="cartOpen = true"
+            class="fixed bottom-6 right-6 z-30 lg:hidden flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
+        >
+            <ShoppingCart class="h-5 w-5" />
+            <span v-if="cartStore.items.length > 0" class="text-sm font-bold">{{ cartStore.items.length }}</span>
+            <span v-if="cartStore.items.length > 0" class="text-xs font-semibold">{{ formatPrice(cartStore.total) }}</span>
+        </button>
+
+        <!-- Backdrop -->
+        <Transition name="fade">
+            <div v-if="cartOpen" class="fixed inset-0 z-40 bg-black/50 lg:hidden" @click="cartOpen = false" />
+        </Transition>
+
+        <!-- Drawer -->
+        <Transition name="drawer">
+            <div v-if="cartOpen" class="fixed inset-y-0 right-0 z-50 w-80 flex flex-col bg-card shadow-2xl lg:hidden">
+                <!-- Header -->
+                <div class="p-4 border-b flex items-center gap-2">
+                    <ShoppingCart class="h-5 w-5" />
+                    <h2 class="font-bold text-base flex-1">Order Cart</h2>
+                    <span v-if="cartStore.items.length > 0" class="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+                        {{ cartStore.items.length }}
+                    </span>
+                    <button @click="cartOpen = false" class="ml-2 rounded-full p-1 hover:bg-muted">
+                        <X class="h-4 w-4" />
+                    </button>
+                </div>
+
+                <!-- Order Type -->
+                <div class="p-4 border-b space-y-3">
+                    <div>
+                        <label class="text-xs font-medium text-muted-foreground block mb-1">Order Type</label>
+                        <select
+                            :value="cartStore.orderType"
+                            @change="(e) => cartStore.orderType = (e.target as HTMLSelectElement).value"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                            <option value="dine_in">Dine In</option>
+                            <option value="takeout">Takeout</option>
+                            <option value="delivery">Delivery</option>
+                        </select>
+                    </div>
+                    <div v-if="cartStore.orderType === 'dine_in'">
+                        <label class="text-xs font-medium text-muted-foreground block mb-1">Table Number</label>
+                        <input
+                            :value="cartStore.tableNumber"
+                            @input="(e) => cartStore.tableNumber = (e.target as HTMLInputElement).value"
+                            type="text" placeholder="e.g. Table 5"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                </div>
+
+                <!-- Cart Items -->
+                <div class="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                    <div v-if="cartStore.items.length === 0" class="text-center text-muted-foreground text-sm py-10">
+                        Cart is empty
+                    </div>
+                    <div v-for="item in cartStore.items" :key="item.id" class="flex gap-2 items-start rounded-lg border bg-background p-3">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold truncate">{{ item.name }}</p>
+                            <p class="text-xs text-muted-foreground">{{ formatPrice(item.unit_price) }} each</p>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button @click="cartStore.updateQuantity(item.id, item.quantity - 1)" class="rounded bg-muted p-0.5 hover:bg-muted/80">
+                                <Minus class="h-3 w-3" />
+                            </button>
+                            <span class="w-6 text-center text-sm font-bold">{{ item.quantity }}</span>
+                            <button @click="cartStore.updateQuantity(item.id, item.quantity + 1)" class="rounded bg-muted p-0.5 hover:bg-muted/80">
+                                <Plus class="h-3 w-3" />
+                            </button>
+                            <button @click="cartStore.removeItem(item.id)" class="ml-1 rounded bg-destructive/10 p-0.5 text-destructive hover:bg-destructive/20">
+                                <X class="h-3 w-3" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Totals -->
+                <div class="p-4 border-t space-y-2 bg-muted/30">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-muted-foreground w-24 shrink-0">Discount (₱)</label>
+                        <input
+                            :value="cartStore.discount"
+                            @input="cartStore.setDiscount(parseFloat(($event.target as HTMLInputElement).value) || 0)"
+                            type="number" min="0" step="0.01"
+                            class="flex-1 rounded-lg border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                    <div class="space-y-1 text-sm pt-1">
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Subtotal</span>
+                            <span>{{ formatPrice(cartStore.subtotal) }}</span>
+                        </div>
+                        <div class="flex justify-between text-red-600">
+                            <span>Discount</span>
+                            <span>-{{ formatPrice(cartStore.discount) }}</span>
+                        </div>
+                        <div class="flex justify-between font-bold text-base border-t pt-1 mt-1">
+                            <span>TOTAL</span>
+                            <span class="text-primary">{{ formatPrice(cartStore.total) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="p-4 space-y-2">
+                    <button
+                        @click="submitOrder"
+                        :disabled="cartStore.items.length === 0 || submitting"
+                        class="w-full rounded-lg bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {{ submitting ? 'Placing Order…' : `Place Order — ${formatPrice(cartStore.total)}` }}
+                    </button>
+                    <button @click="cartStore.clear" class="w-full rounded-lg border bg-background py-2 text-sm font-medium transition hover:bg-muted">
+                        Clear Cart
+                    </button>
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
+
     <!-- Product Modal -->
     <Teleport to="body">
         <Transition name="fade">
@@ -361,4 +489,6 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+.drawer-enter-active, .drawer-leave-active { transition: transform 0.28s ease; }
+.drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
 </style>
