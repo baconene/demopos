@@ -9,6 +9,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+
+    Route::get('settings/payment-tenders', [\App\Http\Controllers\Settings\PaymentTenderSettingsController::class, 'index'])
+        ->name('settings.payment-tenders')
+        ->middleware('role:admin');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

@@ -15,6 +15,8 @@ Route::middleware('auth')->get('/user', function (Request $request) {
 
 Route::prefix('v1')->group(function () {
     // Public routes — static routes BEFORE dynamic {product} to prevent shadowing
+    Route::get('/payment-tenders', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'index']);
+
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{category}', [CategoryController::class, 'show']);
     Route::get('/products', [ProductController::class, 'index']);
@@ -58,5 +60,16 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/monthly-sales', [ReportController::class, 'monthlySales']);
         Route::get('/reports/product-sales', [ReportController::class, 'productSales']);
         Route::get('/reports/inventory-valuation', [ReportController::class, 'inventoryValuation']);
+
+        // Payment Tenders (authenticated write + all-list)
+        Route::get('/payment-tenders/all', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'all']);
+        Route::post('/payment-tenders', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'store']);
+        Route::put('/payment-tenders/{paymentTender}', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'update']);
+        Route::delete('/payment-tenders/{paymentTender}', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'destroy']);
+
+        // Financial Transactions
+        Route::get('/financial-transactions', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'index']);
+        Route::get('/financial-transactions/summary', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'summary']);
+        Route::post('/financial-transactions', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'store']);
     });
 });

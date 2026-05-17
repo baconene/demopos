@@ -40,6 +40,15 @@ class OrderService
 
             $order->calculateTotals();
 
+            \App\Models\FinancialTransaction::create([
+                'type'          => 'order',
+                'amount'        => $order->fresh()->total_amount,
+                'description'   => "Order #{$order->id} ({$order->order_type})",
+                'order_id'      => $order->id,
+                'user_id'       => auth()->id(),
+                'transacted_at' => now(),
+            ]);
+
             return $order;
         });
     }
