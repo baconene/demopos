@@ -10,8 +10,7 @@ export const useCartStore = defineStore('cart', () => {
     const subtotal = computed(() =>
         items.value.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
     )
-    const tax = computed(() => subtotal.value * 0.12)
-    const total = computed(() => subtotal.value + tax.value - discount.value)
+    const total = computed(() => subtotal.value - discount.value)
 
     const addItem = (product: any, quantity = 1, modifiers: number[] = []) => {
         const existing = items.value.find(
@@ -51,7 +50,6 @@ export const useCartStore = defineStore('cart', () => {
         orderType,       // writable ref — CashierDashboard assigns directly
         tableNumber,     // writable ref
         subtotal,
-        tax,
         total,
         addItem,
         removeItem,

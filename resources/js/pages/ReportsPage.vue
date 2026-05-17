@@ -75,8 +75,8 @@ const exportCSV = () => {
     if (reportType.value === 'daily' && dailyReport.value) {
         filename = `daily-sales-${dailyReport.value.date}`
         rows = [
-            ['Date', 'Total Orders', 'Total Sales', 'Discounts', 'VAT'],
-            [dailyReport.value.date, String(dailyReport.value.total_orders), String(dailyReport.value.total_sales), String(dailyReport.value.total_discount), String(dailyReport.value.total_tax)],
+            ['Date', 'Total Orders', 'Total Sales', 'Discounts'],
+            [dailyReport.value.date, String(dailyReport.value.total_orders), String(dailyReport.value.total_sales), String(dailyReport.value.total_discount)],
         ]
     } else if (reportType.value === 'products') {
         filename = `product-sales`
@@ -171,7 +171,7 @@ const topProducts = computed(() =>
                     <span v-if="reportType === 'daily'">Daily Sales — {{ (activeReport as any).date }}</span>
                     <span v-else>Monthly Sales — {{ monthName(Number((activeReport as any).month?.split('-')[1])) }} {{ (activeReport as any).month?.split('-')[0] }}</span>
                 </h2>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div class="rounded-lg bg-muted/40 p-4">
                         <p class="text-xs text-muted-foreground mb-1">Total Orders</p>
                         <p class="text-3xl font-black">{{ activeReport.total_orders }}</p>
@@ -183,10 +183,6 @@ const topProducts = computed(() =>
                     <div class="rounded-lg bg-yellow-50 dark:bg-yellow-950/20 p-4">
                         <p class="text-xs text-muted-foreground mb-1">Discounts</p>
                         <p class="text-2xl font-black text-yellow-600">{{ formatCurrency(activeReport.total_discount) }}</p>
-                    </div>
-                    <div class="rounded-lg bg-blue-50 dark:bg-blue-950/20 p-4">
-                        <p class="text-xs text-muted-foreground mb-1">VAT Collected</p>
-                        <p class="text-2xl font-black text-blue-600">{{ formatCurrency(activeReport.total_tax) }}</p>
                     </div>
                 </div>
             </div>

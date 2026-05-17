@@ -256,10 +256,6 @@ const formatPrice = (val: number) => '₱' + val.toFixed(2)
                         <span>Discount</span>
                         <span>-{{ formatPrice(cartStore.discount) }}</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-muted-foreground">VAT (12%)</span>
-                        <span>{{ formatPrice(cartStore.tax) }}</span>
-                    </div>
                     <div class="flex justify-between font-bold text-base border-t pt-1 mt-1">
                         <span>TOTAL</span>
                         <span class="text-primary">{{ formatPrice(cartStore.total) }}</span>
