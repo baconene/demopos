@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
         // Products — write routes (read routes are public above)
         Route::post('/products', [ProductController::class, 'store']);
         Route::put('/products/{product}', [ProductController::class, 'update']);
+        Route::post('/products/{product}', [ProductController::class, 'update']); // FormData / file upload
         Route::delete('/products/{product}', [ProductController::class, 'destroy']);
 
         // Orders — static sub-routes BEFORE apiResource to avoid {order} shadowing

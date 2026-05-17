@@ -24,6 +24,7 @@ class ProductPageController extends Controller
                 'cost'          => (float) $p->cost,
                 'is_active'     => $p->is_active,
                 'display_order' => $p->display_order,
+                'image'         => $p->image ? '/storage/' . $p->image : null,
                 'category_id'   => $p->category_id,
                 'category_name' => $p->category?->name,
                 'recipes'       => $p->recipes->map(fn ($r) => [

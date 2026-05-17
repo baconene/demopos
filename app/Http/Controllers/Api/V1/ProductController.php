@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
@@ -51,6 +52,7 @@ class ProductController extends Controller
             'cost'                    => 'nullable|numeric|min:0',
             'is_active'               => 'boolean',
             'display_order'           => 'nullable|integer|min:0',
+            'image'                   => 'nullable|image|mimes:jpeg,png,webp|max:2048',
             'recipes'                 => 'nullable|array',
             'recipes.*.ingredient_id' => 'required|exists:ingredients,id',
             'recipes.*.quantity'      => 'required|numeric|min:0.001',
@@ -58,6 +60,11 @@ class ProductController extends Controller
         ]);
 
         $data['sku'] = $data['sku'] ?: null;
+
+        if ($request->hasFile('image')) {
+            $data['image'] = $request->file('image')->store('products', 'public');
+        }
+
         $product = Product::create(Arr::except($data, ['recipes']));
 
         foreach ($data['recipes'] ?? [] as $row) {
@@ -75,6 +82,7 @@ class ProductController extends Controller
         );
     }
 
+    // Accepts both PUT (JSON) and POST (FormData / file upload)
     public function update(Request $request, Product $product): JsonResponse
     {
         $this->adminOnly();
@@ -88,6 +96,7 @@ class ProductController extends Controller
             'cost'                    => 'nullable|numeric|min:0',
             'is_active'               => 'boolean',
             'display_order'           => 'nullable|integer|min:0',
+            'image'                   => 'nullable|image|mimes:jpeg,png,webp|max:2048',
             'recipes'                 => 'nullable|array',
             'recipes.*.ingredient_id' => 'required|exists:ingredients,id',
             'recipes.*.quantity'      => 'required|numeric|min:0.001',
@@ -95,6 +104,17 @@ class ProductController extends Controller
         ]);
 
         $data['sku'] = $data['sku'] ?: null;
+
+        if ($request->hasFile('image')) {
+            if ($product->image) Storage::disk('public')->delete($product->image);
+            $data['image'] = $request->file('image')->store('products', 'public');
+        } elseif ($request->input('remove_image')) {
+            if ($product->image) Storage::disk('public')->delete($product->image);
+            $data['image'] = null;
+        } else {
+            unset($data['image']);
+        }
+
         $product->update(Arr::except($data, ['recipes']));
 
         if (array_key_exists('recipes', $data)) {
@@ -117,6 +137,7 @@ class ProductController extends Controller
     public function destroy(Product $product): Response
     {
         $this->adminOnly();
+        if ($product->image) Storage::disk('public')->delete($product->image);
         $product->delete();
         return response()->noContent();
     }

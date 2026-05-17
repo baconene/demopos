@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { Plus, Pencil, Trash2, X, PlusCircle, MinusCircle, UtensilsCrossed, FolderPlus, Check } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, X, PlusCircle, MinusCircle, UtensilsCrossed, FolderPlus, Check, ImageIcon, Upload } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -20,7 +20,7 @@ interface RecipeRow  { ingredient_id: number; quantity: number; unit: string }
 interface Product {
     id: number; name: string; sku: string | null; description: string | null
     price: number; cost: number; is_active: boolean; display_order: number
-    category_id: number; category_name: string
+    image: string | null; category_id: number; category_name: string
     recipes: { ingredient_id: number; ingredient_name: string; quantity: number; unit: string }[]
 }
 
@@ -30,12 +30,12 @@ const props = defineProps<{ products: Product[]; categories: Category[]; ingredi
 const localCategories = ref<Category[]>([...props.categories])
 
 // ─── State ───────────────────────────────────────────────────────────────────
-const search        = ref('')
-const showModal     = ref(false)
-const editingId     = ref<number | null>(null)
-const submitting    = ref(false)
-const deleteTarget  = ref<Product | null>(null)
-const deleting      = ref(false)
+const search       = ref('')
+const showModal    = ref(false)
+const editingId    = ref<number | null>(null)
+const submitting   = ref(false)
+const deleteTarget = ref<Product | null>(null)
+const deleting     = ref(false)
 
 const blankForm = () => ({
     category_id:   0,
@@ -51,6 +51,25 @@ const blankForm = () => ({
 const form    = ref(blankForm())
 const recipes = ref<RecipeRow[]>([])
 
+// ─── Image state ──────────────────────────────────────────────────────────────
+const imageFile    = ref<File | null>(null)
+const imagePreview = ref<string | null>(null)
+const removeImage  = ref(false)
+
+const onImageChange = (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    imageFile.value    = file
+    imagePreview.value = URL.createObjectURL(file)
+    removeImage.value  = false
+}
+
+const clearImage = () => {
+    imageFile.value    = null
+    imagePreview.value = null
+    removeImage.value  = true
+}
+
 // ─── Computed ────────────────────────────────────────────────────────────────
 const filtered = computed(() => {
     const q = search.value.toLowerCase().trim()
@@ -62,14 +81,17 @@ const filtered = computed(() => {
 
 // ─── Modal helpers ───────────────────────────────────────────────────────────
 const openAdd = () => {
-    editingId.value = null
-    form.value      = blankForm()
-    recipes.value   = []
-    showModal.value = true
+    editingId.value    = null
+    form.value         = blankForm()
+    recipes.value      = []
+    imageFile.value    = null
+    imagePreview.value = null
+    removeImage.value  = false
+    showModal.value    = true
 }
 
 const openEdit = (p: Product) => {
-    editingId.value = p.id
+    editingId.value    = p.id
     form.value = {
         category_id:   p.category_id,
         name:          p.name,
@@ -80,19 +102,16 @@ const openEdit = (p: Product) => {
         is_active:     p.is_active,
         display_order: p.display_order,
     }
-    recipes.value = p.recipes.map((r) => ({
-        ingredient_id: r.ingredient_id,
-        quantity:      r.quantity,
-        unit:          r.unit ?? '',
-    }))
-    showModal.value = true
+    recipes.value      = p.recipes.map((r) => ({ ingredient_id: r.ingredient_id, quantity: r.quantity, unit: r.unit ?? '' }))
+    imageFile.value    = null
+    imagePreview.value = p.image
+    removeImage.value  = false
+    showModal.value    = true
 }
 
 // ─── Recipe row helpers ───────────────────────────────────────────────────────
 const addRecipeRow = () => recipes.value.push({ ingredient_id: 0, quantity: 1, unit: '' })
-
 const removeRecipeRow = (i: number) => recipes.value.splice(i, 1)
-
 const onIngredientChange = (i: number) => {
     const ing = props.ingredients.find((x) => x.id === recipes.value[i].ingredient_id)
     if (ing) recipes.value[i].unit = ing.unit
@@ -106,14 +125,30 @@ const submitForm = async () => {
     }
     submitting.value = true
     const validRecipes = recipes.value.filter((r) => r.ingredient_id > 0 && r.quantity > 0)
-    const payload = { ...form.value, recipes: validRecipes }
+
+    const fd = new FormData()
+    fd.append('category_id',   String(form.value.category_id))
+    fd.append('name',          form.value.name)
+    fd.append('sku',           form.value.sku || '')
+    fd.append('description',   form.value.description || '')
+    fd.append('price',         String(form.value.price))
+    fd.append('cost',          String(form.value.cost || 0))
+    fd.append('is_active',     form.value.is_active ? '1' : '0')
+    fd.append('display_order', String(form.value.display_order || 0))
+    validRecipes.forEach((r, i) => {
+        fd.append(`recipes[${i}][ingredient_id]`, String(r.ingredient_id))
+        fd.append(`recipes[${i}][quantity]`,      String(r.quantity))
+        fd.append(`recipes[${i}][unit]`,           r.unit || '')
+    })
+    if (imageFile.value)  fd.append('image', imageFile.value)
+    if (removeImage.value) fd.append('remove_image', '1')
 
     try {
         if (editingId.value) {
-            await api.put(`/api/v1/products/${editingId.value}`, payload)
+            await api.post(`/api/v1/products/${editingId.value}`, fd)
             toast.success('Product updated')
         } else {
-            await api.post('/api/v1/products', payload)
+            await api.post('/api/v1/products', fd)
             toast.success('Product created')
         }
         showModal.value = false
@@ -127,9 +162,9 @@ const submitForm = async () => {
 }
 
 // ─── New Category ─────────────────────────────────────────────────────────────
-const showNewCat  = ref(false)
-const newCatName  = ref('')
-const addingCat   = ref(false)
+const showNewCat = ref(false)
+const newCatName = ref('')
+const addingCat  = ref(false)
 
 const submitNewCategory = async () => {
     if (!newCatName.value.trim()) return
@@ -139,8 +174,8 @@ const submitNewCategory = async () => {
         const created: Category = { id: res.data.id, name: res.data.name }
         localCategories.value.push(created)
         form.value.category_id = created.id
-        newCatName.value  = ''
-        showNewCat.value  = false
+        newCatName.value = ''
+        showNewCat.value = false
         toast.success(`Category "${created.name}" created`)
     } catch (err: any) {
         toast.error(err.response?.data?.message ?? 'Failed to create category')
@@ -206,8 +241,18 @@ const doDelete = async () => {
                     <tbody class="divide-y">
                         <tr v-for="p in filtered" :key="p.id" class="hover:bg-muted/20">
                             <td class="px-4 py-3">
-                                <p class="font-semibold">{{ p.name }}</p>
-                                <p v-if="p.sku" class="text-xs text-muted-foreground">SKU: {{ p.sku }}</p>
+                                <div class="flex items-center gap-3">
+                                    <div class="h-10 w-10 shrink-0 rounded-lg overflow-hidden bg-muted/40 border">
+                                        <img v-if="p.image" :src="p.image" :alt="p.name" class="h-full w-full object-cover" />
+                                        <div v-else class="h-full w-full flex items-center justify-center">
+                                            <ImageIcon class="h-4 w-4 text-muted-foreground opacity-40" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p class="font-semibold">{{ p.name }}</p>
+                                        <p v-if="p.sku" class="text-xs text-muted-foreground">SKU: {{ p.sku }}</p>
+                                    </div>
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-muted-foreground">{{ p.category_name ?? '—' }}</td>
                             <td class="px-4 py-3 text-right font-bold">₱{{ p.price.toFixed(2) }}</td>
@@ -235,9 +280,7 @@ const doDelete = async () => {
                             </td>
                         </tr>
                         <tr v-if="filtered.length === 0">
-                            <td colspan="7" class="px-4 py-10 text-center text-muted-foreground text-sm">
-                                No products found.
-                            </td>
+                            <td colspan="7" class="px-4 py-10 text-center text-muted-foreground text-sm">No products found.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -254,16 +297,40 @@ const doDelete = async () => {
                 @click.self="showModal = false"
             >
                 <div class="w-full max-w-2xl rounded-2xl bg-background shadow-2xl my-8">
-                    <!-- Modal Header -->
                     <div class="p-5 border-b flex items-center justify-between">
                         <h3 class="text-lg font-bold">{{ editingId ? 'Edit Product' : 'Add Product' }}</h3>
-                        <button @click="showModal = false" class="rounded-full p-1 hover:bg-muted">
-                            <X class="h-4 w-4" />
-                        </button>
+                        <button @click="showModal = false" class="rounded-full p-1 hover:bg-muted"><X class="h-4 w-4" /></button>
                     </div>
 
-                    <!-- Modal Body -->
                     <div class="p-5 space-y-5">
+                        <!-- Image Upload -->
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-2">Product Image</label>
+                            <div class="flex items-start gap-4">
+                                <!-- Preview box -->
+                                <div class="relative h-28 w-28 shrink-0 rounded-xl border overflow-hidden bg-muted/30">
+                                    <img v-if="imagePreview" :src="imagePreview" class="h-full w-full object-cover" />
+                                    <div v-else class="h-full w-full flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                                        <ImageIcon class="h-8 w-8 opacity-30" />
+                                        <span class="text-xs opacity-50">No image</span>
+                                    </div>
+                                    <button v-if="imagePreview" @click="clearImage" type="button"
+                                        class="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80">
+                                        <X class="h-3 w-3" />
+                                    </button>
+                                </div>
+                                <!-- Upload area -->
+                                <label class="flex flex-1 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-5 text-sm text-muted-foreground hover:bg-muted/30 transition-colors">
+                                    <Upload class="h-6 w-6 opacity-50" />
+                                    <span class="text-center text-xs">
+                                        {{ imageFile ? imageFile.name : 'Click to upload image' }}
+                                    </span>
+                                    <span class="text-xs opacity-50">JPEG, PNG, WebP — max 2 MB</span>
+                                    <input type="file" class="hidden" accept="image/jpeg,image/png,image/webp" @change="onImageChange" />
+                                </label>
+                            </div>
+                        </div>
+
                         <!-- Basic Info Grid -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="sm:col-span-2">
@@ -285,25 +352,16 @@ const doDelete = async () => {
                                         <FolderPlus class="h-4 w-4" />
                                     </button>
                                 </div>
-                                <!-- Inline new category form -->
                                 <Transition name="slide">
                                     <div v-if="showNewCat" class="mt-2 flex gap-2">
-                                        <input
-                                            v-model="newCatName"
-                                            type="text"
-                                            placeholder="New category name…"
-                                            @keyup.enter="submitNewCategory"
-                                            @keyup.escape="showNewCat = false"
-                                            class="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                            autofocus
-                                        />
+                                        <input v-model="newCatName" type="text" placeholder="New category name…"
+                                            @keyup.enter="submitNewCategory" @keyup.escape="showNewCat = false"
+                                            class="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" autofocus />
                                         <button type="button" @click="submitNewCategory" :disabled="addingCat || !newCatName.trim()"
                                             class="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1">
-                                            <Check class="h-3.5 w-3.5" />
-                                            {{ addingCat ? 'Adding…' : 'Add' }}
+                                            <Check class="h-3.5 w-3.5" /> {{ addingCat ? 'Adding…' : 'Add' }}
                                         </button>
-                                        <button type="button" @click="showNewCat = false"
-                                            class="rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted">
+                                        <button type="button" @click="showNewCat = false" class="rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted">
                                             <X class="h-3.5 w-3.5" />
                                         </button>
                                     </div>
@@ -340,30 +398,24 @@ const doDelete = async () => {
                             <div class="flex items-center justify-between mb-3">
                                 <div>
                                     <p class="text-sm font-semibold">Inventory Ingredients</p>
-                                    <p class="text-xs text-muted-foreground">These are deducted from stock when this product is ordered.</p>
+                                    <p class="text-xs text-muted-foreground">Deducted from stock when ordered.</p>
                                 </div>
                                 <button @click="addRecipeRow"
                                     class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
                                     <PlusCircle class="h-3.5 w-3.5" /> Add Ingredient
                                 </button>
                             </div>
-
                             <div v-if="recipes.length === 0" class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                                 No ingredients linked — inventory won't be deducted for this product.
                             </div>
-
                             <div v-else class="space-y-2">
-                                <div v-for="(row, i) in recipes" :key="i"
-                                    class="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                                <div v-for="(row, i) in recipes" :key="i" class="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
                                     <select v-model="row.ingredient_id" @change="onIngredientChange(i)"
                                         class="flex-1 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
                                         <option :value="0" disabled>Select ingredient…</option>
-                                        <option v-for="ing in ingredients" :key="ing.id" :value="ing.id">
-                                            {{ ing.name }} ({{ ing.unit }})
-                                        </option>
+                                        <option v-for="ing in ingredients" :key="ing.id" :value="ing.id">{{ ing.name }} ({{ ing.unit }})</option>
                                     </select>
-                                    <input v-model.number="row.quantity" type="number" min="0.001" step="0.001"
-                                        placeholder="Qty"
+                                    <input v-model.number="row.quantity" type="number" min="0.001" step="0.001" placeholder="Qty"
                                         class="w-24 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
                                     <input v-model="row.unit" type="text" placeholder="unit"
                                         class="w-16 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
@@ -375,12 +427,8 @@ const doDelete = async () => {
                         </div>
                     </div>
 
-                    <!-- Modal Footer -->
                     <div class="p-5 border-t flex gap-3">
-                        <button @click="showModal = false"
-                            class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">
-                            Cancel
-                        </button>
+                        <button @click="showModal = false" class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">Cancel</button>
                         <button @click="submitForm" :disabled="submitting"
                             class="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
                             {{ submitting ? 'Saving…' : (editingId ? 'Save Changes' : 'Create Product') }}
@@ -391,23 +439,17 @@ const doDelete = async () => {
         </Transition>
     </Teleport>
 
-    <!-- Delete Confirmation Modal -->
+    <!-- Delete Confirmation -->
     <Teleport to="body">
         <Transition name="fade">
-            <div v-if="deleteTarget"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                @click.self="deleteTarget = null">
+            <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="deleteTarget = null">
                 <div class="w-full max-w-sm rounded-2xl bg-background shadow-2xl p-6 space-y-4">
                     <h3 class="text-lg font-bold">Delete Product?</h3>
                     <p class="text-sm text-muted-foreground">
-                        This will permanently delete <span class="font-semibold text-foreground">{{ deleteTarget.name }}</span>
-                        and its linked recipes. This cannot be undone.
+                        Permanently delete <span class="font-semibold text-foreground">{{ deleteTarget.name }}</span> and its linked recipes. This cannot be undone.
                     </p>
                     <div class="flex gap-3">
-                        <button @click="deleteTarget = null"
-                            class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">
-                            Cancel
-                        </button>
+                        <button @click="deleteTarget = null" class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">Cancel</button>
                         <button @click="doDelete" :disabled="deleting"
                             class="flex-1 rounded-lg bg-red-600 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">
                             {{ deleting ? 'Deleting…' : 'Delete' }}
