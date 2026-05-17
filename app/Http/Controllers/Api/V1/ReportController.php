@@ -9,14 +9,11 @@ use Illuminate\Http\JsonResponse;
 
 class ReportController extends Controller
 {
-    public function __construct(private ReportService $reportService)
-    {
-        $this->middleware('auth:sanctum');
-    }
+    public function __construct(private ReportService $reportService) {}
 
     public function dailySales(): JsonResponse
     {
-        $this->authorize('view-reports');
+        $this->authorize('view reports');
 
         $date = request()->input('date') ? Carbon::parse(request()->input('date')) : null;
         $report = $this->reportService->getDailySalesReport($date);
@@ -26,7 +23,7 @@ class ReportController extends Controller
 
     public function monthlySales(): JsonResponse
     {
-        $this->authorize('view-reports');
+        $this->authorize('view reports');
 
         $year = request()->input('year', Carbon::now()->year);
         $month = request()->input('month', Carbon::now()->month);
@@ -38,7 +35,7 @@ class ReportController extends Controller
 
     public function productSales(): JsonResponse
     {
-        $this->authorize('view-reports');
+        $this->authorize('view reports');
 
         $startDate = request()->input('start_date') ? Carbon::parse(request()->input('start_date')) : null;
         $endDate = request()->input('end_date') ? Carbon::parse(request()->input('end_date')) : null;
@@ -50,7 +47,7 @@ class ReportController extends Controller
 
     public function inventoryValuation(): JsonResponse
     {
-        $this->authorize('view-reports');
+        $this->authorize('view reports');
 
         $report = $this->reportService->getInventoryValuation();
 

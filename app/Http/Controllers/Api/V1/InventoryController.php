@@ -16,9 +16,7 @@ class InventoryController extends Controller
     public function __construct(
         private InventoryService $inventoryService,
         private InventoryRepository $inventoryRepository
-    ) {
-        $this->middleware('auth:sanctum');
-    }
+    ) {}
 
     public function store(\Illuminate\Http\Request $request): JsonResponse
     {
