@@ -8,10 +8,14 @@ use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Product;
 use App\Repositories\OrderRepository;
 use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -49,11 +53,43 @@ class OrderController extends Controller
         return response()->json(new OrderResource($order));
     }
 
-    public function update(Order $order): JsonResponse
+    public function update(Order $order, Request $request): JsonResponse
     {
         $this->checkPermission('update orders');
 
-        return response()->json(new OrderResource($order));
+        $data = $request->validate([
+            'notes'                  => 'nullable|string|max:500',
+            'discount_amount'        => 'nullable|numeric|min:0',
+            'items'                  => 'required|array|min:1',
+            'items.*.product_id'     => 'required|integer|exists:products,id',
+            'items.*.quantity'       => 'required|integer|min:1',
+        ]);
+
+        DB::transaction(function () use ($order, $data) {
+            if (array_key_exists('notes', $data)) {
+                $order->update(['notes' => $data['notes']]);
+            }
+            if (array_key_exists('discount_amount', $data)) {
+                $order->update(['discount_amount' => $data['discount_amount']]);
+            }
+
+            $order->items()->delete();
+
+            foreach ($data['items'] as $itemData) {
+                $product = Product::findOrFail($itemData['product_id']);
+                OrderItem::create([
+                    'order_id'   => $order->id,
+                    'product_id' => $product->id,
+                    'quantity'   => $itemData['quantity'],
+                    'unit_price' => $product->price,
+                    'subtotal'   => $product->price * $itemData['quantity'],
+                ]);
+            }
+
+            $order->calculateTotals();
+        });
+
+        return response()->json(new OrderResource($order->fresh(['items.product', 'queueNumber', 'user'])));
     }
 
     public function destroy(Order $order): Response
