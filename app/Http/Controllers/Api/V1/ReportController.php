@@ -13,7 +13,7 @@ class ReportController extends Controller
 
     public function dailySales(): JsonResponse
     {
-        $this->authorize('view reports');
+        $this->checkPermission();
 
         $date = request()->input('date') ? Carbon::parse(request()->input('date')) : null;
         $report = $this->reportService->getDailySalesReport($date);
@@ -23,7 +23,7 @@ class ReportController extends Controller
 
     public function monthlySales(): JsonResponse
     {
-        $this->authorize('view reports');
+        $this->checkPermission();
 
         $year = request()->input('year', Carbon::now()->year);
         $month = request()->input('month', Carbon::now()->month);
@@ -35,7 +35,7 @@ class ReportController extends Controller
 
     public function productSales(): JsonResponse
     {
-        $this->authorize('view reports');
+        $this->checkPermission();
 
         $startDate = request()->input('start_date') ? Carbon::parse(request()->input('start_date')) : null;
         $endDate = request()->input('end_date') ? Carbon::parse(request()->input('end_date')) : null;
@@ -47,10 +47,17 @@ class ReportController extends Controller
 
     public function inventoryValuation(): JsonResponse
     {
-        $this->authorize('view reports');
+        $this->checkPermission();
 
         $report = $this->reportService->getInventoryValuation();
 
         return response()->json($report);
+    }
+
+    private function checkPermission(): void
+    {
+        if (! auth()->user()?->hasAnyRole('admin') && ! auth()->user()?->hasPermissionTo('view reports')) {
+            abort(403, 'Unauthorized');
+        }
     }
 }

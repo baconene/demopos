@@ -24,11 +24,20 @@ class OrderController extends Controller
         private OrderRepository $orderRepository
     ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $this->checkPermission('view orders');
 
         $orders = Order::with(['items.product', 'user', 'queueNumber'])
+            ->when($request->status, fn($q) => $q->where('status', $request->status))
+            ->when($request->payment_status, fn($q) => $q->where('payment_status', $request->payment_status))
+            ->when($request->date_from, fn($q) => $q->whereDate('created_at', '>=', $request->date_from))
+            ->when($request->date_to, fn($q) => $q->whereDate('created_at', '<=', $request->date_to))
+            ->when($request->search, fn($q) => $q->where(function ($q) use ($request) {
+                $q->where('id', $request->search)
+                  ->orWhere('notes', 'like', "%{$request->search}%")
+                  ->orWhere('table_number', 'like', "%{$request->search}%");
+            }))
             ->orderByDesc('created_at')
             ->paginate(20);
 
