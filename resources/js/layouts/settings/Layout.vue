@@ -18,6 +18,7 @@ const baseNavItems: NavItem[] = [
     { title: 'Profile',     href: editProfile() },
     { title: 'Security',    href: editSecurity() },
     { title: 'Appearance',  href: editAppearance() },
+    { title: 'Printing',    href: '/settings/printing' },
 ];
 
 const sidebarNavItems = computed<NavItem[]>(() => {

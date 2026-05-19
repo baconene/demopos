@@ -5,6 +5,7 @@ import { useCartStore } from '@/stores/cartStore'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
 import { ShoppingCart, X, Plus, Minus, Search, CreditCard, Banknote, CheckCircle2, Printer } from 'lucide-vue-next'
+import { printReceipt as doPrint } from '@/utils/printReceipt'
 
 defineOptions({
     layout: {
@@ -200,74 +201,13 @@ const closeAndClear = () => {
     completedOrder.value = null
 }
 
-const printReceipt = () => {
-    const o = completedOrder.value
-    if (!o) return
-    const now = new Date()
-    const dateStr = now.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
-    const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true })
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const fmt = (n: number) => '&#8369;' + n.toFixed(2)
-
-    const itemsHTML = o.items.map(i => `
-        <div class="row"><span class="flex1">${i.quantity}x ${esc(i.name)}</span><span>${fmt(i.unit_price * i.quantity)}</span></div>
-        <div class="small muted">${fmt(i.unit_price)} each</div>
-    `).join('')
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Courier New',Courier,monospace;font-size:11px;width:72mm;padding:4mm 3mm;}
-  @media print{@page{size:72mm auto;margin:0;}body{padding:2mm;}}
-  .center{text-align:center;}.bold{font-weight:bold;}.muted{color:#666;}
-  .large{font-size:14px;}.xlarge{font-size:20px;font-weight:bold;}
-  hr{border:none;border-top:1px dashed #000;margin:3px 0;}
-  .row{display:flex;justify-content:space-between;margin:1px 0;}
-  .flex1{flex:1;word-break:break-word;padding-right:4px;}
-  .small{font-size:9px;}.total{font-size:13px;font-weight:bold;}
-</style></head><body>
-  <div class="center bold large">BYPASSGRILL</div>
-  <div class="center muted" style="font-size:9px;">Filipino Grill Restaurant</div>
-  <hr>
-  <div class="center xlarge">${o.queueNumber ? '#' + o.queueNumber : 'Order #' + o.orderId}</div>
-  <div class="center muted" style="font-size:9px;">${dateStr} &nbsp; ${timeStr}</div>
-  <div class="center bold" style="margin-top:2px;">${o.orderType.replace('_',' ').toUpperCase()}</div>
-  ${o.tableNumber ? `<div class="center">Table: ${esc(o.tableNumber)}</div>` : ''}
-  ${o.customerName ? `<div class="center bold">${esc(o.customerName)}</div>` : ''}
-  ${o.customerContact ? `<div class="center muted small">${esc(o.customerContact)}</div>` : ''}
-  ${o.customerAddress ? `<div class="center small" style="word-break:break-word;">${esc(o.customerAddress)}</div>` : ''}
-  <hr>
-  <div class="row bold"><span>ITEM</span><span>AMT</span></div>
-  <hr>
-  ${itemsHTML}
-  <hr>
-  <div class="row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
-  ${o.discount > 0 ? `<div class="row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>` : ''}
-  <div class="row total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
-  <hr>
-  ${o.paid
-    ? `<div class="row"><span>Method</span><span>${esc(o.tenderName)}</span></div>
-       <div class="row"><span>Tendered</span><span>${fmt(o.amountTendered)}</span></div>
-       ${o.change > 0 ? `<div class="row bold"><span>CHANGE</span><span>${fmt(o.change)}</span></div>` : ''}`
-    : `<div class="center bold" style="letter-spacing:1px;">** PAYMENT PENDING **</div>`
-  }
-  ${o.notes ? `<hr><div class="small">Note: ${esc(o.notes)}</div>` : ''}
-  <hr>
-  <div class="center" style="margin-top:3px;">Thank you for dining with us!</div>
-  <div class="center muted small">Please come again  &#9829;</div>
-</body></html>`
-
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px;'
-    document.body.appendChild(iframe)
-    const doc = iframe.contentDocument ?? iframe.contentWindow?.document
-    if (!doc) { document.body.removeChild(iframe); toast.error('Could not open print frame'); return }
-    doc.open(); doc.write(html); doc.close()
-    iframe.contentWindow?.focus()
-    setTimeout(() => {
-        iframe.contentWindow?.print()
-        setTimeout(() => document.body.removeChild(iframe), 1000)
-    }, 250)
+const printReceipt = async () => {
+    if (!completedOrder.value) return
+    try {
+        await doPrint(completedOrder.value)
+    } catch (err: any) {
+        toast.error(err?.message ?? 'Print failed')
+    }
 }
 
 const formatPrice = (val: number) => '₱' + val.toFixed(2)
