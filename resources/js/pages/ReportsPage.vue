@@ -6,7 +6,7 @@ import api from '@/utils/api'
 import {
     BarChart3, Download, RefreshCw, TrendingUp, TrendingDown,
     DollarSign, Plus, X, Search, ChevronLeft, ChevronRight,
-    ShoppingBag, ClipboardList, Package,
+    ShoppingBag, ClipboardList, Package, Trash2,
 } from 'lucide-vue-next'
 
 defineOptions({
@@ -135,6 +135,7 @@ const ftPage = ref(1)
 const showEntryForm = ref(false)
 const entryForm = ref({ type: 'expense' as 'expense' | 'income_adjustment', description: '', amount: '', notes: '', transacted_at: '' })
 const entrySaving = ref(false)
+const ftDeleting = ref<number | null>(null)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -283,6 +284,20 @@ const generateReport = async () => {
         toast.error(err.response?.data?.message ?? 'Failed to load report')
     } finally {
         loading.value = false
+    }
+}
+
+const deleteEntry = async (tx: FtTransaction) => {
+    if (!confirm(`Delete "${tx.description}"? This cannot be undone.`)) return
+    ftDeleting.value = tx.id
+    try {
+        await api.delete(`/api/v1/financial-transactions/${tx.id}`)
+        toast.success('Entry deleted.')
+        await loadFinancial(ftPage.value)
+    } catch (err: any) {
+        toast.error(err.response?.data?.message ?? 'Failed to delete entry.')
+    } finally {
+        ftDeleting.value = null
     }
 }
 
@@ -798,6 +813,7 @@ onMounted(async () => {
                                 <th class="px-4 py-3 text-right">Amount</th>
                                 <th class="px-4 py-3 text-right">Balance</th>
                                 <th class="px-4 py-3 text-left">By</th>
+                                <th class="px-4 py-3"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -813,6 +829,17 @@ onMounted(async () => {
                                     {{ fmt(tx.running_balance) }}
                                 </td>
                                 <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.user?.name ?? '—' }}</td>
+                                <td class="px-4 py-2 text-center">
+                                    <button
+                                        v-if="tx.type === 'expense' || tx.type === 'income_adjustment'"
+                                        @click="deleteEntry(tx)"
+                                        :disabled="ftDeleting === tx.id"
+                                        class="rounded p-1 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40 transition"
+                                        title="Delete entry"
+                                    >
+                                        <Trash2 class="h-3.5 w-3.5" />
+                                    </button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

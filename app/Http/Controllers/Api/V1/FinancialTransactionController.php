@@ -82,6 +82,36 @@ class FinancialTransactionController extends Controller {
         return response()->json($tx, 201);
     }
 
+    public function destroy(FinancialTransaction $financialTransaction): JsonResponse {
+        if (! auth()->user()?->hasAnyRole('admin', 'auditor')) abort(403);
+
+        if (! in_array($financialTransaction->type, ['expense', 'income_adjustment'])) {
+            abort(422, 'Only manually created entries can be deleted.');
+        }
+
+        $deletedAt  = $financialTransaction->transacted_at;
+        $deletedId  = $financialTransaction->id;
+        $signedAmt  = $financialTransaction->type === 'expense'
+            ? (float) $financialTransaction->amount
+            : -(float) $financialTransaction->amount;
+
+        $financialTransaction->delete();
+
+        // Recalculate running_balance for every transaction after the deleted one
+        FinancialTransaction::where(function ($q) use ($deletedAt, $deletedId) {
+                $q->where('transacted_at', '>', $deletedAt)
+                  ->orWhere(fn ($q2) => $q2->where('transacted_at', $deletedAt)->where('id', '>', $deletedId));
+            })
+            ->orderBy('transacted_at')
+            ->orderBy('id')
+            ->each(function (FinancialTransaction $tx) use ($signedAmt) {
+                $tx->running_balance = round((float) $tx->running_balance + $signedAmt, 2);
+                $tx->saveQuietly();
+            });
+
+        return response()->json(null, 204);
+    }
+
     private function checkReports(): void {
         if (! auth()->user()?->hasAnyRole('admin') && ! auth()->user()?->hasPermissionTo('view reports')) {
             abort(403);
