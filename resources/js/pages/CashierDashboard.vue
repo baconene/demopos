@@ -4,7 +4,7 @@ import { Head, usePage } from '@inertiajs/vue3'
 import { useCartStore } from '@/stores/cartStore'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { ShoppingCart, X, Plus, Minus, Search, CreditCard, Banknote, CheckCircle2, Printer } from 'lucide-vue-next'
+import { ShoppingCart, X, Plus, Minus, Search, CreditCard, Banknote, CheckCircle2, Printer, ClipboardList } from 'lucide-vue-next'
 import { printReceipt as doPrint } from '@/utils/printReceipt'
 import { queueOrder, queuePayment } from '@/utils/offlineQueue'
 import { refreshCount } from '@/utils/offlineSync'
@@ -29,9 +29,36 @@ interface Tender { id: number; name: string; is_active: boolean; display_order: 
 interface PendingOrderState {
     id: number
     total_amount: number
-    // set for offline-queued orders
+    queue_number?: number | string | null
+    order_type?: string
+    table_number?: string | null
+    customer_name?: string | null
+    customer_contact?: string | null
+    customer_address?: string | null
+    notes?: string | null
+    subtotal?: number
+    discount_amount?: number
     _localId?: string
     _offlineQueue?: string
+    _existingItems?: { name: string; quantity: number; unit_price: number }[]
+    _isExistingOrder?: boolean
+}
+
+interface UnpaidOrder {
+    id: number
+    queue_number: number | string | null
+    order_type: string
+    table_number: string | null
+    customer_name: string | null
+    customer_contact: string | null
+    customer_address: string | null
+    notes: string | null
+    subtotal: string
+    discount_amount: string
+    total_amount: string
+    payment_status: string
+    items: { id: number; product: { id: number; name: string }; quantity: number; unit_price: string }[]
+    created_at: string
 }
 
 interface CompletedOrder {
@@ -68,6 +95,11 @@ const reference = ref('')
 const paymentSubmitting = ref(false)
 const paymentDone = ref(false)
 const completedOrder = ref<CompletedOrder | null>(null)
+
+// Unpaid orders panel
+const unpaidOrdersOpen = ref(false)
+const unpaidOrders = ref<UnpaidOrder[]>([])
+const loadingUnpaid = ref(false)
 
 const filteredProducts = computed(() => {
     let list = props.products
@@ -192,18 +224,21 @@ const submitOrder = async () => {
 const captureOrder = (paid: boolean): CompletedOrder => {
     const o = pendingOrder.value!
     const tendered = parseFloat(amountTendered.value) || o.total_amount
+    const items = o._existingItems ?? cartStore.items.map(i => ({ name: i.name, quantity: i.quantity, unit_price: i.unit_price }))
+    const subtotal = o.subtotal ?? cartStore.subtotal
+    const discount = o.discount_amount ?? cartStore.discount
     return {
         orderId: o.id,
-        queueNumber: o._offlineQueue ?? (o as any).queue_number ?? null,
-        orderType: (o as any).order_type ?? 'dine_in',
-        tableNumber: (o as any).table_number ?? null,
-        customerName: (o as any).customer_name ?? null,
-        customerContact: (o as any).customer_contact ?? null,
-        customerAddress: (o as any).customer_address ?? null,
-        notes: (o as any).notes ?? null,
-        items: cartStore.items.map(i => ({ name: i.name, quantity: i.quantity, unit_price: i.unit_price })),
-        subtotal: cartStore.subtotal,
-        discount: cartStore.discount,
+        queueNumber: o._offlineQueue ?? o.queue_number ?? null,
+        orderType: o.order_type ?? 'dine_in',
+        tableNumber: o.table_number ?? null,
+        customerName: o.customer_name ?? null,
+        customerContact: o.customer_contact ?? null,
+        customerAddress: o.customer_address ?? null,
+        notes: o.notes ?? null,
+        items,
+        subtotal,
+        discount,
         total: o.total_amount,
         tenderName: tenders.value.find(t => t.id === selectedTenderId.value)?.name ?? '',
         amountTendered: tendered,
@@ -260,10 +295,11 @@ const skipPayment = () => {
 
 const closeAndClear = () => {
     const o = completedOrder.value
+    const isExisting = pendingOrder.value?._isExistingOrder ?? false
     const queueOrId = o?.queueNumber ?? o?.orderId
     if (o?.paid) toast.success(`Order #${queueOrId} paid! Thank you.`)
     else toast.success(`Order #${queueOrId} placed. Payment pending.`)
-    cartStore.clear()
+    if (!isExisting) cartStore.clear()
     paymentOpen.value = false
     pendingOrder.value = null
     paymentDone.value = false
@@ -277,6 +313,46 @@ const printReceipt = async () => {
     } catch (err: any) {
         toast.error(err?.message ?? 'Print failed')
     }
+}
+
+const loadUnpaidOrders = async () => {
+    loadingUnpaid.value = true
+    try {
+        const res = await api.get('/api/v1/orders', { params: { payment_status: 'pending' } })
+        unpaidOrders.value = res.data.data ?? []
+    } catch {
+        toast.error('Failed to load pending orders')
+    } finally {
+        loadingUnpaid.value = false
+    }
+}
+
+const selectUnpaidOrder = async (order: UnpaidOrder) => {
+    unpaidOrdersOpen.value = false
+    await loadTenders()
+    pendingOrder.value = {
+        id: order.id,
+        total_amount: parseFloat(order.total_amount),
+        queue_number: order.queue_number,
+        order_type: order.order_type,
+        table_number: order.table_number,
+        customer_name: order.customer_name,
+        customer_contact: order.customer_contact,
+        customer_address: order.customer_address,
+        notes: order.notes,
+        subtotal: parseFloat(order.subtotal),
+        discount_amount: parseFloat(order.discount_amount),
+        _existingItems: order.items.map(i => ({
+            name: i.product.name,
+            quantity: i.quantity,
+            unit_price: parseFloat(i.unit_price),
+        })),
+        _isExistingOrder: true,
+    }
+    selectedTenderId.value = tenders.value[0]?.id ?? null
+    amountTendered.value = parseFloat(order.total_amount).toFixed(2)
+    reference.value = ''
+    paymentOpen.value = true
 }
 
 const formatPrice = (val: number) => '₱' + val.toFixed(2)
@@ -359,9 +435,18 @@ onMounted(loadTenders)
             <div class="p-4 border-b flex items-center gap-2">
                 <ShoppingCart class="h-5 w-5" />
                 <h2 class="font-bold text-base">Order Cart</h2>
-                <span v-if="cartStore.items.length > 0" class="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">
-                    {{ cartStore.items.length }}
-                </span>
+                <div class="ml-auto flex items-center gap-2">
+                    <button
+                        @click="unpaidOrdersOpen = true; loadUnpaidOrders()"
+                        class="flex items-center gap-1 rounded-full border border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition"
+                    >
+                        <ClipboardList class="h-3 w-3" />
+                        Pending
+                    </button>
+                    <span v-if="cartStore.items.length > 0" class="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+                        {{ cartStore.items.length }}
+                    </span>
+                </div>
             </div>
 
             <div class="p-4 border-b space-y-3">
@@ -522,10 +607,17 @@ onMounted(loadTenders)
                 <div class="p-4 border-b flex items-center gap-2">
                     <ShoppingCart class="h-5 w-5" />
                     <h2 class="font-bold text-base flex-1">Order Cart</h2>
+                    <button
+                        @click="cartOpen = false; unpaidOrdersOpen = true; loadUnpaidOrders()"
+                        class="flex items-center gap-1 rounded-full border border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 text-xs font-medium hover:bg-amber-100 transition"
+                    >
+                        <ClipboardList class="h-3 w-3" />
+                        Pending
+                    </button>
                     <span v-if="cartStore.items.length > 0" class="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">
                         {{ cartStore.items.length }}
                     </span>
-                    <button @click="cartOpen = false" class="ml-2 rounded-full p-1 hover:bg-muted">
+                    <button @click="cartOpen = false" class="ml-1 rounded-full p-1 hover:bg-muted">
                         <X class="h-4 w-4" />
                     </button>
                 </div>
@@ -729,7 +821,7 @@ onMounted(loadTenders)
                             </div>
                             <div>
                                 <h3 class="font-bold">Collect Payment</h3>
-                                <p class="text-xs text-muted-foreground">Order #{{ (pendingOrder as any).queue_number ?? pendingOrder.id }}</p>
+                                <p class="text-xs text-muted-foreground">Order #{{ pendingOrder._offlineQueue ?? pendingOrder.queue_number ?? pendingOrder.id }}</p>
                             </div>
                         </div>
 
@@ -814,6 +906,69 @@ onMounted(loadTenders)
                         </div>
                     </template>
 
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
+
+    <!-- Unpaid Orders Panel -->
+    <Teleport to="body">
+        <Transition name="fade">
+            <div
+                v-if="unpaidOrdersOpen"
+                class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-4"
+                @click.self="unpaidOrdersOpen = false"
+            >
+                <div class="w-full max-w-lg rounded-2xl bg-background shadow-2xl overflow-hidden">
+                    <div class="p-4 border-b flex items-center gap-3">
+                        <ClipboardList class="h-5 w-5 text-amber-500" />
+                        <h3 class="font-bold text-base flex-1">Pending Payments</h3>
+                        <button @click="unpaidOrdersOpen = false" class="rounded-full p-1 hover:bg-muted">
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div class="overflow-y-auto max-h-[70vh]">
+                        <div v-if="loadingUnpaid" class="text-center py-10 text-sm text-muted-foreground">
+                            Loading…
+                        </div>
+                        <div v-else-if="unpaidOrders.length === 0" class="text-center py-10 text-sm text-muted-foreground">
+                            No pending orders
+                        </div>
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="order in unpaidOrders"
+                                :key="order.id"
+                                class="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition"
+                            >
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-bold">#{{ order.queue_number ?? order.id }}</span>
+                                        <span class="text-xs bg-muted rounded-full px-2 py-0.5 capitalize">
+                                            {{ order.order_type.replace('_', ' ') }}
+                                        </span>
+                                        <span v-if="order.table_number" class="text-xs text-muted-foreground">{{ order.table_number }}</span>
+                                    </div>
+                                    <p v-if="order.customer_name" class="text-xs text-muted-foreground truncate mt-0.5">{{ order.customer_name }}</p>
+                                    <p class="text-xs text-muted-foreground truncate mt-0.5">
+                                        {{ order.items.map(i => `${i.quantity}× ${i.product.name}`).join(', ') }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground mt-0.5">
+                                        {{ new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                                    </p>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <p class="font-bold text-primary">{{ formatPrice(parseFloat(order.total_amount)) }}</p>
+                                    <button
+                                        @click="selectUnpaidOrder(order)"
+                                        class="mt-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 transition"
+                                    >
+                                        Pay Now
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </Transition>

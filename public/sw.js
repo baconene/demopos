@@ -7,7 +7,13 @@ const PAGE_CACHE    = `pages-${SW_VERSION}`
 const ALL_CACHES    = [STATIC_CACHE, API_CACHE, PAGE_CACHE]
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
-self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('install', event => {
+    self.skipWaiting()
+    // Pre-cache /pos so it's always available as an offline fallback
+    event.waitUntil(
+        caches.open(PAGE_CACHE).then(cache => cache.add('/pos').catch(() => {}))
+    )
+})
 
 self.addEventListener('activate', event => {
     event.waitUntil(
@@ -81,7 +87,17 @@ async function networkFirst(request, cacheName) {
         if (response.ok || response.status === 304) cache.put(request, response.clone())
         return response
     } catch {
-        return await cache.match(request) ?? offline503('Page not available offline. Please connect and refresh.')
+        const cached = await cache.match(request)
+        if (cached) return cached
+        // Inertia XHR navigation — return JSON so Inertia doesn't white-screen
+        if (request.headers.get('X-Inertia')) {
+            return new Response(
+                JSON.stringify({ message: 'This page is not available offline. Please return to the POS.' }),
+                { status: 503, headers: { 'Content-Type': 'application/json' } }
+            )
+        }
+        // Full page navigation — redirect to the always-cached POS page
+        return Response.redirect('/pos', 302)
     }
 }
 
