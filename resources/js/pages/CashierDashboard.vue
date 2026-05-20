@@ -142,8 +142,11 @@ const submitOrder = async () => {
             const raw = res.data.data ?? res.data
             pendingOrder.value = { ...raw, total_amount: parseFloat(raw.total_amount ?? 0) }
         } catch (err: any) {
-            // Network failure (no response) — queue offline
-            if (!err.response) {
+            // Queue offline when: no network response OR browser reports offline
+            const isOffline = !navigator.onLine || !err.response
+            if (!isOffline) throw err
+
+            try {
                 const queued = await queueOrder(payload as Record<string, unknown>)
                 pendingOrder.value = {
                     id: 0,
@@ -153,13 +156,16 @@ const submitOrder = async () => {
                 }
                 await refreshCount()
                 toast.warning(`Offline — order ${queued.offlineQueueNumber} queued for sync.`)
-            } else {
-                throw err
+            } catch {
+                toast.error('Could not save order offline. Check browser storage permissions.')
+                return
             }
         }
 
         cartOpen.value = false
         await loadTenders()
+        // If tenders couldn't load (offline, nothing cached), payment step is still usable
+        // with no tender selected — cashier can skip or select when back online
         selectedTenderId.value = tenders.value[0]?.id ?? null
         amountTendered.value = pendingOrder.value!.total_amount.toFixed(2)
         reference.value = ''
@@ -206,15 +212,23 @@ const submitPayment = async () => {
         }
 
         if (isOfflineOrder()) {
-            // Order is queued offline — queue the payment too, linked by localId
-            await queuePayment(
-                pendingOrder.value._localId!,
-                paymentPayload as Record<string, unknown>,
-            )
+            // Order is queued offline — queue the payment linked by localId
+            await queuePayment(pendingOrder.value._localId!, paymentPayload as Record<string, unknown>)
             await refreshCount()
-            toast.warning('Payment queued — will be recorded when connection is restored.')
+            toast.warning('Payment queued — will sync when connection is restored.')
         } else {
-            await api.post('/api/v1/payments', paymentPayload)
+            try {
+                await api.post('/api/v1/payments', paymentPayload)
+            } catch (err: any) {
+                // Connection dropped between order and payment — queue the payment
+                if (!navigator.onLine || !err.response) {
+                    await queuePayment(pendingOrder.value._localId ?? String(pendingOrder.value.id), paymentPayload as Record<string, unknown>)
+                    await refreshCount()
+                    toast.warning('Payment queued — will sync when connection is restored.')
+                } else {
+                    throw err
+                }
+            }
         }
 
         completedOrder.value = captureOrder(true)
