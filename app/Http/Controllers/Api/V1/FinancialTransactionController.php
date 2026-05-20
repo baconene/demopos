@@ -66,18 +66,14 @@ class FinancialTransactionController extends Controller {
             'transacted_at' => 'nullable|date',
         ]);
 
-        $last = FinancialTransaction::orderByDesc('transacted_at')->orderByDesc('id')->first();
-        $prevBalance = $last ? (float) $last->running_balance : 0.0;
-        $signed = $data['type'] === 'expense' ? -(float) $data['amount'] : (float) $data['amount'];
-
         $tx = FinancialTransaction::create([
-            'type'            => $data['type'],
-            'amount'          => $data['amount'],
-            'description'     => $data['description'],
-            'notes'           => $data['notes'] ?? null,
-            'user_id'         => auth()->id(),
-            'transacted_at'   => $data['transacted_at'] ?? now(),
-            'running_balance' => $prevBalance + $signed,
+            'type'          => $data['type'],
+            'amount'        => $data['amount'],
+            'description'   => $data['description'],
+            'notes'         => $data['notes'] ?? null,
+            'user_id'       => auth()->id(),
+            'transacted_at' => $data['transacted_at'] ?? now(),
+            // running_balance is computed automatically by FinancialTransaction::boot()
         ]);
         return response()->json($tx, 201);
     }

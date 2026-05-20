@@ -3,6 +3,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 class FinancialTransaction extends Model {
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        // Automatically compute running_balance for every new transaction so
+        // records created by OrderService / PaymentService are correct too.
+        static::creating(function (FinancialTransaction $tx): void {
+            $prev = static::orderByDesc('transacted_at')
+                ->orderByDesc('id')
+                ->value('running_balance') ?? 0.0;
+
+            $tx->running_balance = round($prev + match ($tx->type) {
+                'payment', 'income_adjustment' => (float) $tx->amount,
+                'expense', 'order'             => -(float) $tx->amount,
+                default                        => 0.0,
+            }, 2);
+        });
+    }
+
     protected $fillable = [
         'type', 'amount', 'description',
         'order_id', 'payment_id', 'payment_tender_id',
