@@ -44,7 +44,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Order detail
     Route::get('orders/{order}', [OrderDetailPageController::class, 'show'])
-        ->name('orders.show')
+        ->name('orders.detail')
         ->middleware('can:view orders');
 
     // Reports
