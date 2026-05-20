@@ -6,6 +6,9 @@ import { toast } from 'vue-sonner'
 import api from '@/utils/api'
 import { ShoppingCart, X, Plus, Minus, Search, CreditCard, Banknote, CheckCircle2, Printer } from 'lucide-vue-next'
 import { printReceipt as doPrint } from '@/utils/printReceipt'
+import { queueOrder, queuePayment } from '@/utils/offlineQueue'
+import { refreshCount } from '@/utils/offlineSync'
+import OfflineBanner from '@/components/OfflineBanner.vue'
 
 defineOptions({
     layout: {
@@ -23,8 +26,16 @@ interface Product {
 }
 interface Category { id: number; name: string }
 interface Tender { id: number; name: string; is_active: boolean; display_order: number }
+interface PendingOrderState {
+    id: number
+    total_amount: number
+    // set for offline-queued orders
+    _localId?: string
+    _offlineQueue?: string
+}
+
 interface CompletedOrder {
-    orderId: number; queueNumber: number | null; orderType: string
+    orderId: number; queueNumber: number | string | null; orderType: string
     tableNumber: string | null; customerName: string | null
     customerContact: string | null; customerAddress: string | null; notes: string | null
     items: { name: string; quantity: number; unit_price: number }[]
@@ -48,7 +59,8 @@ const cartOpen = ref(false)
 
 // Payment modal state
 const paymentOpen = ref(false)
-const pendingOrder = ref<{ id: number; total_amount: number } | null>(null)
+const pendingOrder = ref<PendingOrderState | null>(null)
+const isOfflineOrder = () => !!pendingOrder.value?._localId
 const tenders = ref<Tender[]>([])
 const selectedTenderId = ref<number | null>(null)
 const amountTendered = ref('')
@@ -124,14 +136,32 @@ const submitOrder = async () => {
                 modifiers: item.modifiers ?? [],
             })),
         }
-        const res = await api.post('/api/v1/orders', payload)
-        const raw = res.data.data ?? res.data
-        // Normalize decimal fields that Laravel serializes as strings
-        pendingOrder.value = { ...raw, total_amount: parseFloat(raw.total_amount ?? 0) }
+
+        try {
+            const res = await api.post('/api/v1/orders', payload)
+            const raw = res.data.data ?? res.data
+            pendingOrder.value = { ...raw, total_amount: parseFloat(raw.total_amount ?? 0) }
+        } catch (err: any) {
+            // Network failure (no response) — queue offline
+            if (!err.response) {
+                const queued = await queueOrder(payload as Record<string, unknown>)
+                pendingOrder.value = {
+                    id: 0,
+                    total_amount: cartStore.total,
+                    _localId: queued.localId,
+                    _offlineQueue: queued.offlineQueueNumber,
+                }
+                await refreshCount()
+                toast.warning(`Offline — order ${queued.offlineQueueNumber} queued for sync.`)
+            } else {
+                throw err
+            }
+        }
+
         cartOpen.value = false
         await loadTenders()
         selectedTenderId.value = tenders.value[0]?.id ?? null
-        amountTendered.value = pendingOrder.value.total_amount.toFixed(2)
+        amountTendered.value = pendingOrder.value!.total_amount.toFixed(2)
         reference.value = ''
         paymentOpen.value = true
     } catch (err: any) {
@@ -146,7 +176,7 @@ const captureOrder = (paid: boolean): CompletedOrder => {
     const tendered = parseFloat(amountTendered.value) || o.total_amount
     return {
         orderId: o.id,
-        queueNumber: (o as any).queue_number ?? null,
+        queueNumber: o._offlineQueue ?? (o as any).queue_number ?? null,
         orderType: (o as any).order_type ?? 'dine_in',
         tableNumber: (o as any).table_number ?? null,
         customerName: (o as any).customer_name ?? null,
@@ -168,12 +198,25 @@ const submitPayment = async () => {
     if (!pendingOrder.value || !selectedTenderId.value) return
     paymentSubmitting.value = true
     try {
-        await api.post('/api/v1/payments', {
+        const paymentPayload = {
             order_id: pendingOrder.value.id,
             payment_tender_id: selectedTenderId.value,
             amount: pendingOrder.value.total_amount,
             reference: reference.value || null,
-        })
+        }
+
+        if (isOfflineOrder()) {
+            // Order is queued offline — queue the payment too, linked by localId
+            await queuePayment(
+                pendingOrder.value._localId!,
+                paymentPayload as Record<string, unknown>,
+            )
+            await refreshCount()
+            toast.warning('Payment queued — will be recorded when connection is restored.')
+        } else {
+            await api.post('/api/v1/payments', paymentPayload)
+        }
+
         completedOrder.value = captureOrder(true)
         paymentDone.value = true
     } catch (err: any) {
@@ -217,6 +260,8 @@ onMounted(loadTenders)
 
 <template>
     <Head title="Point of Sale" />
+
+    <OfflineBanner />
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <!-- LEFT: Product Browser -->

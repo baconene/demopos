@@ -1,4 +1,5 @@
 import { createInertiaApp } from '@inertiajs/vue3';
+import { initOfflineSync } from '@/utils/offlineSync';
 import { createApp, h } from 'vue';
 import { createPinia } from 'pinia';
 import { initializeTheme } from '@/composables/useAppearance';
@@ -40,3 +41,4 @@ createInertiaApp({
 
 initializeTheme();
 initializeFlashToast();
+initOfflineSync();
