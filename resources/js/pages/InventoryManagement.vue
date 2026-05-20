@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { AlertTriangle, Package, RefreshCw, X, Plus, Pencil } from 'lucide-vue-next'
+import { AlertTriangle, Package, RefreshCw, X, Plus, Pencil, ShoppingBag } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -29,7 +29,8 @@ const itemTypeColor = (t: string) => ITEM_TYPES.find(x => x.value === t)?.color 
 const itemTypeLabel = (t: string) => ITEM_TYPES.find(x => x.value === t)?.label ?? t
 interface Transaction {
     id: number; ingredient_name: string; type: string; quantity: number
-    old_quantity: number; new_quantity: number; user_name: string; notes: string | null; created_at: string
+    old_quantity: number; new_quantity: number; user_name: string
+    reference: string | null; order_id: number | null; notes: string | null; created_at: string
 }
 
 const props = defineProps<{ ingredients: Ingredient[]; recentTransactions: Transaction[] }>()
@@ -287,7 +288,7 @@ const typeColor: Record<string, string> = {
                             <th class="px-4 py-3 text-right">Qty</th>
                             <th class="px-4 py-3 text-right">Before → After</th>
                             <th class="px-4 py-3 text-left">By</th>
-                            <th class="px-4 py-3 text-left">Notes</th>
+                            <th class="px-4 py-3 text-left">Source / Notes</th>
                             <th class="px-4 py-3 text-left">Time</th>
                         </tr>
                     </thead>
@@ -304,13 +305,24 @@ const typeColor: Record<string, string> = {
                                 {{ tx.old_quantity.toFixed(2) }} → {{ tx.new_quantity.toFixed(2) }}
                             </td>
                             <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.user_name ?? '—' }}</td>
-                            <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.notes ?? '—' }}</td>
-                            <td class="px-4 py-2 text-muted-foreground text-xs">
+                            <td class="px-4 py-2 text-xs max-w-xs">
+                                <div class="flex flex-col gap-1">
+                                    <a v-if="tx.order_id"
+                                        :href="`/orders/${tx.order_id}`"
+                                        class="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-semibold hover:bg-primary/20 w-fit">
+                                        <ShoppingBag class="h-3 w-3" />
+                                        Order #{{ tx.order_id }}
+                                    </a>
+                                    <span v-if="tx.notes" class="text-muted-foreground leading-tight">{{ tx.notes }}</span>
+                                    <span v-if="!tx.order_id && !tx.notes" class="text-muted-foreground">—</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
                                 {{ tx.created_at ? new Date(tx.created_at).toLocaleString() : '—' }}
                             </td>
                         </tr>
                         <tr v-if="recentTransactions.length === 0">
-                            <td colspan="8" class="px-4 py-8 text-center text-muted-foreground text-sm">
+                            <td colspan="7" class="px-4 py-8 text-center text-muted-foreground text-sm">
                                 No recent transactions.
                             </td>
                         </tr>

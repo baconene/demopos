@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Ingredient;
 use App\Models\InventoryTransaction;
+use App\Models\Order;
 use App\Models\OrderItem;
 use App\Enums\InventoryTransactionType;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,16 @@ class InventoryService
     {
         $product = $orderItem->product;
         $recipes = $product->recipes()->with('ingredient')->get();
+
+        $order = Order::find($orderItem->order_id);
+        $orderTypeLabel = match($order?->order_type) {
+            'dine_in'  => 'Dine In',
+            'takeout'  => 'Takeout',
+            'delivery' => 'Delivery',
+            default    => $order?->order_type ?? 'Order',
+        };
+        $tableInfo = $order?->table_number ? " · Table {$order->table_number}" : '';
+        $notes = "Order #{$orderItem->order_id} · {$orderTypeLabel}{$tableInfo} · {$product->name} ×{$orderItem->quantity}";
 
         foreach ($recipes as $recipe) {
             $ingredient = $recipe->ingredient;
@@ -33,7 +44,8 @@ class InventoryService
                 $ingredient,
                 $required,
                 InventoryTransactionType::STOCK_OUT,
-                'order_' . $orderItem->order_id
+                'order_' . $orderItem->order_id,
+                $notes,
             );
         }
 
