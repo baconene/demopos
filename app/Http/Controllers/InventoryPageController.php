@@ -20,7 +20,7 @@ class InventoryPageController extends Controller
                 'unit' => $i->unit,
                 'current_quantity' => (float) $i->current_quantity,
                 'min_quantity' => (float) $i->min_quantity,
-                'cost_per_unit' => (float) $i->cost_per_unit,
+                'cost_per_unit' => (float) ($i->cost_per_unit ?? 0),
                 'is_low_stock' => $i->current_quantity <= $i->min_quantity,
             ]);
 

@@ -65,8 +65,9 @@ class OrderService
             // Check inventory availability
             $orderItem = new OrderItem([
                 'product_id' => $product->id,
-                'quantity' => $quantity,
+                'quantity'   => $quantity,
                 'unit_price' => $product->price,
+                'unit_cost'  => (float) ($product->cost ?? 0),
             ]);
 
             if (!$this->inventoryService->checkAvailability($orderItem)) {

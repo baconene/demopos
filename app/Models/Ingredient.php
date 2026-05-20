@@ -11,6 +11,7 @@ class Ingredient extends Model
         'unit',
         'current_quantity',
         'min_quantity',
+        'cost_per_unit',
         'track_inventory',
         'is_active',
     ];
@@ -18,6 +19,7 @@ class Ingredient extends Model
     protected $casts = [
         'current_quantity' => 'decimal:3',
         'min_quantity' => 'decimal:3',
+        'cost_per_unit' => 'decimal:4',
         'track_inventory' => 'boolean',
         'is_active' => 'boolean',
     ];

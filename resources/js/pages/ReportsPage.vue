@@ -60,7 +60,7 @@ const props = defineProps<{
 }>()
 
 // ── Active tab ─────────────────────────────────────────────────────────────────
-type Tab = 'orders' | 'inventory' | 'financial' | 'daily' | 'monthly' | 'products'
+type Tab = 'orders' | 'inventory' | 'financial' | 'daily' | 'monthly' | 'products' | 'pl'
 const tab = ref<Tab>('orders')
 const loading = ref(false)
 
@@ -68,6 +68,7 @@ const tabs: { key: Tab; label: string }[] = [
     { key: 'orders',    label: 'Orders' },
     { key: 'inventory', label: 'Inventory' },
     { key: 'financial', label: 'Financial' },
+    { key: 'pl',        label: 'P&L' },
     { key: 'daily',     label: 'Daily Sales' },
     { key: 'monthly',   label: 'Monthly Sales' },
     { key: 'products',  label: 'Product Sales' },
@@ -105,6 +106,19 @@ const invTransactions = ref<InvTransaction[]>([])
 const invMeta = ref<any>(null)
 const invPage = ref(1)
 const ingredients = ref<Ingredient[]>([])
+
+// ── P&L ───────────────────────────────────────────────────────────────────────
+interface PL {
+    period: { start: string; end: string }
+    revenue: { order_count: number; gross_sales: number; discounts: number; net_revenue: number }
+    cogs: { total: number; has_data: boolean }
+    gross_profit: number; gross_margin: number
+    expenses: { total: number; count: number; breakdown: { description: string; amount: number; transacted_at: string }[] }
+    net_profit: number; net_margin: number
+}
+const plStartDate = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+const plEndDate = ref(today)
+const plReport = ref<PL | null>(null)
 
 // ── Financial ─────────────────────────────────────────────────────────────────
 const ftStartDate = ref(today)
@@ -224,11 +238,20 @@ const loadFinancial = async () => {
     ftMeta.value = listRes.data.meta ?? null
 }
 
+const loadPL = async () => {
+    const res = await api.get('/api/v1/reports/profit-loss', {
+        params: { start_date: plStartDate.value, end_date: plEndDate.value },
+    })
+    plReport.value = res.data
+}
+
 const generateReport = async () => {
     loading.value = true
     try {
         if (tab.value === 'orders') {
             await loadOrders(1)
+        } else if (tab.value === 'pl') {
+            await loadPL()
         } else if (tab.value === 'daily') {
             const res = await api.get('/api/v1/reports/daily-sales', { params: { date: selectedDate.value } })
             dailyReport.value = res.data
@@ -438,6 +461,14 @@ onMounted(async () => {
                         <input v-model="prodDateFrom" type="date" class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                     <div><label class="text-xs font-medium text-muted-foreground block mb-1">To</label>
                         <input v-model="prodDateTo" type="date" class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+                </template>
+
+                <!-- P&L date range -->
+                <template v-if="tab === 'pl'">
+                    <div><label class="text-xs font-medium text-muted-foreground block mb-1">From</label>
+                        <input v-model="plStartDate" type="date" class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+                    <div><label class="text-xs font-medium text-muted-foreground block mb-1">To</label>
+                        <input v-model="plEndDate" type="date" class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                 </template>
 
                 <!-- Financial date range -->
@@ -729,6 +760,111 @@ onMounted(async () => {
             </div>
             <div v-else-if="!loading" class="rounded-xl border bg-card p-10 text-center shadow-sm text-muted-foreground text-sm">
                 Select a date range and click <strong>Generate</strong> to load financial records.
+            </div>
+        </template>
+
+        <!-- ── Profit & Loss ─────────────────────────────────────────────────── -->
+        <template v-if="tab === 'pl'">
+            <div v-if="plReport" class="space-y-4">
+                <p class="text-sm text-muted-foreground">
+                    Period: <strong>{{ plReport.period.start }}</strong> to <strong>{{ plReport.period.end }}</strong>
+                </p>
+
+                <!-- P&L Statement -->
+                <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
+                    <div class="p-4 border-b bg-muted/30">
+                        <h2 class="font-bold text-base flex items-center gap-2"><TrendingUp class="h-4 w-4" /> Profit & Loss Statement</h2>
+                    </div>
+                    <div class="divide-y">
+                        <!-- Revenue -->
+                        <div class="px-5 py-4 space-y-2">
+                            <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Revenue</p>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-muted-foreground">Gross Sales ({{ plReport.revenue.order_count }} orders)</span>
+                                <span class="font-semibold">{{ fmt(plReport.revenue.gross_sales) }}</span>
+                            </div>
+                            <div v-if="plReport.revenue.discounts > 0" class="flex justify-between text-sm">
+                                <span class="text-muted-foreground pl-4">— Discounts</span>
+                                <span class="text-red-500">−{{ fmt(plReport.revenue.discounts) }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm font-bold border-t pt-2">
+                                <span>Net Revenue</span>
+                                <span class="text-green-600">{{ fmt(plReport.revenue.net_revenue) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- COGS -->
+                        <div class="px-5 py-4 space-y-2">
+                            <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cost of Goods Sold (COGS)</p>
+                            <div v-if="!plReport.cogs.has_data" class="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg px-3 py-2">
+                                No cost data — set ingredient costs and product recipes to enable COGS tracking.
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-muted-foreground">Total COGS</span>
+                                <span class="font-semibold text-red-500">−{{ fmt(plReport.cogs.total) }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm font-bold border-t pt-2">
+                                <span>Gross Profit <span class="text-xs font-normal text-muted-foreground">({{ plReport.gross_margin }}% margin)</span></span>
+                                <span :class="plReport.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ fmt(plReport.gross_profit) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Operating Expenses -->
+                        <div class="px-5 py-4 space-y-2">
+                            <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Operating Expenses ({{ plReport.expenses.count }})</p>
+                            <div v-if="plReport.expenses.breakdown.length > 0" class="space-y-1">
+                                <div v-for="exp in plReport.expenses.breakdown" :key="exp.transacted_at + exp.description"
+                                    class="flex justify-between text-xs text-muted-foreground pl-2">
+                                    <span class="truncate max-w-xs">{{ exp.description }} <span class="opacity-60">— {{ exp.transacted_at?.slice(0, 10) }}</span></span>
+                                    <span class="shrink-0 ml-4">−{{ fmt(exp.amount) }}</span>
+                                </div>
+                            </div>
+                            <div v-else class="text-xs text-muted-foreground pl-2">No expenses recorded for this period.</div>
+                            <div class="flex justify-between text-sm font-semibold border-t pt-2">
+                                <span>Total Expenses</span>
+                                <span class="text-red-500">−{{ fmt(plReport.expenses.total) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Net Profit -->
+                        <div :class="['px-5 py-5', plReport.net_profit >= 0 ? 'bg-green-50 dark:bg-green-950/20' : 'bg-red-50 dark:bg-red-950/20']">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <p class="text-base font-black" :class="plReport.net_profit >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600'">
+                                        {{ plReport.net_profit >= 0 ? 'Net Profit' : 'Net Loss' }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">Net Margin: {{ plReport.net_margin }}%</p>
+                                </div>
+                                <p class="text-2xl font-black" :class="plReport.net_profit >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600'">
+                                    {{ fmt(plReport.net_profit) }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <p class="text-xs text-muted-foreground mb-1">Gross Sales</p>
+                        <p class="text-xl font-black">{{ fmt(plReport.revenue.gross_sales) }}</p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <p class="text-xs text-muted-foreground mb-1">COGS</p>
+                        <p class="text-xl font-black text-red-500">{{ fmt(plReport.cogs.total) }}</p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <p class="text-xs text-muted-foreground mb-1">Expenses</p>
+                        <p class="text-xl font-black text-red-500">{{ fmt(plReport.expenses.total) }}</p>
+                    </div>
+                    <div :class="['rounded-xl border p-4 shadow-sm', plReport.net_profit >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800']">
+                        <p class="text-xs text-muted-foreground mb-1">Net Profit</p>
+                        <p class="text-xl font-black" :class="plReport.net_profit >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600'">{{ fmt(plReport.net_profit) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div v-else-if="!loading" class="rounded-xl border bg-card p-10 text-center shadow-sm text-muted-foreground text-sm">
+                Select a date range and click <strong>Generate</strong> to load the P&amp;L statement.
             </div>
         </template>
 

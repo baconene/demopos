@@ -134,6 +134,22 @@ class ProductController extends Controller
         );
     }
 
+    public function calculateCost(Product $product): JsonResponse
+    {
+        $this->adminOnly();
+
+        $product->load('recipes.ingredient');
+
+        $calculatedCost = $product->recipes->sum(
+            fn ($r) => (float) $r->quantity * (float) ($r->ingredient?->cost_per_unit ?? 0)
+        );
+
+        // Auto-save the calculated cost to the product
+        $product->update(['cost' => $calculatedCost]);
+
+        return response()->json(['cost' => round($calculatedCost, 2)]);
+    }
+
     public function destroy(Product $product): Response
     {
         $this->adminOnly();

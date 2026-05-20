@@ -11,14 +11,18 @@ class OrderItem extends Model
         'product_id',
         'quantity',
         'unit_price',
+        'unit_cost',
         'subtotal',
+        'cost_subtotal',
         'special_instructions',
         'status',
     ];
 
     protected $casts = [
-        'unit_price' => 'decimal:2',
-        'subtotal' => 'decimal:2',
+        'unit_price'    => 'decimal:2',
+        'unit_cost'     => 'decimal:2',
+        'subtotal'      => 'decimal:2',
+        'cost_subtotal' => 'decimal:2',
     ];
 
     public function order()
@@ -39,7 +43,8 @@ class OrderItem extends Model
     public function calculateSubtotal()
     {
         $modifiersTotal = $this->exists ? $this->modifiers()->sum('price') : 0;
-        $this->subtotal = ($this->unit_price + $modifiersTotal) * $this->quantity;
+        $this->subtotal      = ($this->unit_price + $modifiersTotal) * $this->quantity;
+        $this->cost_subtotal = ($this->unit_cost ?? 0) * $this->quantity;
 
         if ($this->exists) {
             $this->save();

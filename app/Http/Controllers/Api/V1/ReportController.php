@@ -54,6 +54,20 @@ class ReportController extends Controller
         return response()->json($report);
     }
 
+    public function profitLoss(): JsonResponse
+    {
+        $this->checkPermission();
+
+        $start = request()->input('start_date')
+            ? Carbon::parse(request()->input('start_date'))
+            : Carbon::now()->startOfMonth();
+        $end = request()->input('end_date')
+            ? Carbon::parse(request()->input('end_date'))
+            : Carbon::now()->endOfMonth();
+
+        return response()->json($this->reportService->getProfitLossReport($start, $end));
+    }
+
     public function inventoryTransactions(): JsonResponse
     {
         $this->checkPermission();

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { Plus, Pencil, Trash2, X, PlusCircle, MinusCircle, UtensilsCrossed, FolderPlus, Check, ImageIcon, Upload } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, X, PlusCircle, MinusCircle, UtensilsCrossed, FolderPlus, Check, ImageIcon, Upload, Calculator } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -15,7 +15,7 @@ defineOptions({
 })
 
 interface Category   { id: number; name: string }
-interface Ingredient { id: number; name: string; unit: string }
+interface Ingredient { id: number; name: string; unit: string; cost_per_unit: number }
 interface RecipeRow  { ingredient_id: number; quantity: number; unit: string }
 interface Product {
     id: number; name: string; sku: string | null; description: string | null
@@ -115,6 +115,36 @@ const removeRecipeRow = (i: number) => recipes.value.splice(i, 1)
 const onIngredientChange = (i: number) => {
     const ing = props.ingredients.find((x) => x.id === recipes.value[i].ingredient_id)
     if (ing) recipes.value[i].unit = ing.unit
+}
+
+// ─── Recipe cost calculation ──────────────────────────────────────────────────
+const calculatingCost = ref(false)
+
+const recipeCostPreview = computed(() => {
+    return recipes.value.reduce((sum, row) => {
+        if (!row.ingredient_id || row.quantity <= 0) return sum
+        const ing = props.ingredients.find((x) => x.id === row.ingredient_id)
+        return sum + (ing ? (ing.cost_per_unit ?? 0) * row.quantity : 0)
+    }, 0)
+})
+
+const calculateCostFromRecipes = async () => {
+    // Client-side preview is instant; if editing an existing product, also persist via API
+    if (editingId.value) {
+        calculatingCost.value = true
+        try {
+            const res = await api.post(`/api/v1/products/${editingId.value}/calculate-cost`)
+            form.value.cost = res.data.cost
+            toast.success(`Cost calculated: ₱${res.data.cost.toFixed(2)}`)
+        } catch {
+            toast.error('Failed to calculate cost')
+        } finally {
+            calculatingCost.value = false
+        }
+    } else {
+        form.value.cost = parseFloat(recipeCostPreview.value.toFixed(2))
+        toast.success(`Cost estimated: ₱${form.value.cost.toFixed(2)}`)
+    }
 }
 
 // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -379,8 +409,19 @@ const doDelete = async () => {
                             </div>
                             <div>
                                 <label class="text-xs font-medium text-muted-foreground block mb-1.5">Cost (₱)</label>
-                                <input v-model.number="form.cost" type="number" min="0" step="0.01"
-                                    class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                                <div class="flex gap-2">
+                                    <input v-model.number="form.cost" type="number" min="0" step="0.01"
+                                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                                    <button type="button" @click="calculateCostFromRecipes" :disabled="calculatingCost || recipes.length === 0"
+                                        :title="recipes.length ? `Calculate from recipes (≈₱${recipeCostPreview.toFixed(2)})` : 'Add ingredients first'"
+                                        class="flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed text-muted-foreground hover:text-foreground shrink-0">
+                                        <Calculator class="h-3.5 w-3.5" />
+                                        <span class="hidden sm:inline">{{ calculatingCost ? 'Calc…' : 'Calc' }}</span>
+                                    </button>
+                                </div>
+                                <p v-if="recipes.length > 0" class="mt-1 text-xs text-muted-foreground">
+                                    Recipe estimate: ₱{{ recipeCostPreview.toFixed(2) }}
+                                </p>
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs font-medium text-muted-foreground block mb-1.5">Description</label>

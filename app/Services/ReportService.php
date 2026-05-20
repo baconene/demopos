@@ -62,4 +62,83 @@ class ReportService
             ->selectRaw('*, (current_quantity) as valuation')
             ->get();
     }
+
+    public function getProfitLossReport(Carbon $start, Carbon $end): array
+    {
+        // Revenue from paid orders
+        $revenue = \App\Models\Order::whereBetween('created_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->where('payment_status', 'paid')
+            ->selectRaw('
+                COUNT(*) as order_count,
+                COALESCE(SUM(total_amount), 0) as gross_sales,
+                COALESCE(SUM(discount_amount), 0) as discounts
+            ')
+            ->first();
+
+        $grossSales = (float) ($revenue->gross_sales ?? 0);
+        $discounts  = (float) ($revenue->discounts ?? 0);
+        $netRevenue = $grossSales - $discounts;
+
+        // COGS: sum of cost_subtotal on items from paid orders in period
+        $cogs = (float) \App\Models\OrderItem::whereHas('order', fn ($q) => $q
+            ->whereBetween('created_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->where('payment_status', 'paid')
+        )->sum('cost_subtotal');
+
+        $grossProfit  = $netRevenue - $cogs;
+        $grossMargin  = $netRevenue > 0 ? round(($grossProfit / $netRevenue) * 100, 2) : 0;
+
+        // Operating expenses
+        $expenseRows = \App\Models\FinancialTransaction::where('type', 'expense')
+            ->whereBetween('transacted_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->selectRaw('COALESCE(SUM(amount), 0) as total, COUNT(*) as count')
+            ->first();
+
+        $totalExpenses = (float) ($expenseRows->total ?? 0);
+        $expenseCount  = (int)   ($expenseRows->count ?? 0);
+
+        // Expense breakdown
+        $expenseBreakdown = \App\Models\FinancialTransaction::where('type', 'expense')
+            ->whereBetween('transacted_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->orderByDesc('transacted_at')
+            ->get(['description', 'amount', 'transacted_at'])
+            ->map(fn ($e) => [
+                'description'    => $e->description,
+                'amount'         => (float) $e->amount,
+                'transacted_at'  => $e->transacted_at,
+            ]);
+
+        $netProfit = $grossProfit - $totalExpenses;
+        $netMargin = $netRevenue > 0 ? round(($netProfit / $netRevenue) * 100, 2) : 0;
+
+        // Flag if COGS data is incomplete (orders exist but all have zero cost)
+        $hasCogs = $cogs > 0;
+        $paidOrderCount = (int) ($revenue->order_count ?? 0);
+
+        return [
+            'period' => [
+                'start' => $start->toDateString(),
+                'end'   => $end->toDateString(),
+            ],
+            'revenue' => [
+                'order_count' => $paidOrderCount,
+                'gross_sales' => $grossSales,
+                'discounts'   => $discounts,
+                'net_revenue' => $netRevenue,
+            ],
+            'cogs' => [
+                'total'       => $cogs,
+                'has_data'    => $hasCogs,
+            ],
+            'gross_profit'  => $grossProfit,
+            'gross_margin'  => $grossMargin,
+            'expenses' => [
+                'total'     => $totalExpenses,
+                'count'     => $expenseCount,
+                'breakdown' => $expenseBreakdown,
+            ],
+            'net_profit'    => $netProfit,
+            'net_margin'    => $netMargin,
+        ];
+    }
 }

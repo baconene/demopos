@@ -34,6 +34,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/products', [ProductController::class, 'store']);
         Route::put('/products/{product}', [ProductController::class, 'update']);
         Route::post('/products/{product}', [ProductController::class, 'update']); // FormData / file upload
+        Route::post('/products/{product}/calculate-cost', [ProductController::class, 'calculateCost']);
         Route::delete('/products/{product}', [ProductController::class, 'destroy']);
 
         // Orders — static sub-routes BEFORE apiResource to avoid {order} shadowing
@@ -53,6 +54,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/inventory', [InventoryController::class, 'index']);
         Route::get('/inventory/low-stock', [InventoryController::class, 'lowStock']);
         Route::post('/inventory/adjust', [InventoryController::class, 'adjust']);
+        Route::patch('/inventory/{ingredient}', [InventoryController::class, 'update']);
         Route::get('/inventory/{ingredient}/transactions', [InventoryController::class, 'transactions']);
 
         // Reports
@@ -61,6 +63,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/product-sales', [ReportController::class, 'productSales']);
         Route::get('/reports/inventory-valuation', [ReportController::class, 'inventoryValuation']);
         Route::get('/reports/inventory-transactions', [ReportController::class, 'inventoryTransactions']);
+        Route::get('/reports/profit-loss', [ReportController::class, 'profitLoss']);
 
         // Payment Tenders (authenticated write + all-list)
         Route::get('/payment-tenders/all', [\App\Http\Controllers\Api\V1\PaymentTenderController::class, 'all']);

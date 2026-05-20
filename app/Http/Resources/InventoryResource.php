@@ -15,6 +15,7 @@ class InventoryResource extends JsonResource
             'unit' => $this->unit,
             'current_quantity' => $this->current_quantity,
             'min_quantity' => $this->min_quantity,
+            'cost_per_unit' => (float) $this->cost_per_unit,
             'is_low_stock' => $this->isLowStock(),
             'track_inventory' => $this->track_inventory,
             'is_active' => $this->is_active,

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/utils/api'
-import { AlertTriangle, Package, RefreshCw, X, Plus } from 'lucide-vue-next'
+import { AlertTriangle, Package, RefreshCw, X, Plus, Pencil } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -78,10 +78,10 @@ const submitAdjustment = async () => {
 // ─── Add Ingredient ───────────────────────────────────────────────────────────
 const showAddIngredient = ref(false)
 const addingIngredient  = ref(false)
-const newIngredient = ref({ name: '', unit: '', current_quantity: 0, min_quantity: 0 })
+const newIngredient = ref({ name: '', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 })
 
 const openAddIngredient = () => {
-    newIngredient.value = { name: '', unit: '', current_quantity: 0, min_quantity: 0 }
+    newIngredient.value = { name: '', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 }
     showAddIngredient.value = true
 }
 
@@ -100,6 +100,36 @@ const submitAddIngredient = async () => {
         toast.error(err.response?.data?.message ?? 'Failed to add ingredient')
     } finally {
         addingIngredient.value = false
+    }
+}
+
+// ─── Edit Ingredient ──────────────────────────────────────────────────────────
+const editingIngredient = ref<Ingredient | null>(null)
+const editForm = ref({ name: '', unit: '', min_quantity: 0, cost_per_unit: 0 })
+const savingEdit = ref(false)
+
+const openEdit = (item: Ingredient) => {
+    editingIngredient.value = item
+    editForm.value = {
+        name:          item.name,
+        unit:          item.unit,
+        min_quantity:  item.min_quantity,
+        cost_per_unit: item.cost_per_unit,
+    }
+}
+
+const submitEdit = async () => {
+    if (!editingIngredient.value) return
+    savingEdit.value = true
+    try {
+        await api.patch(`/api/v1/inventory/${editingIngredient.value.id}`, editForm.value)
+        toast.success(`${editForm.value.name} updated`)
+        editingIngredient.value = null
+        router.reload({ only: ['ingredients'] })
+    } catch (err: any) {
+        toast.error(err.response?.data?.message ?? 'Failed to update ingredient')
+    } finally {
+        savingEdit.value = false
     }
 }
 
@@ -186,12 +216,20 @@ const typeColor: Record<string, string> = {
                                 </span>
                             </td>
                             <td class="px-4 py-3 text-center">
-                                <button
-                                    @click="openAdjust(item)"
-                                    class="rounded-lg bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
-                                >
-                                    Adjust
-                                </button>
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <button
+                                        @click="openEdit(item)"
+                                        class="rounded-lg border px-2.5 py-1 text-xs font-semibold hover:bg-muted flex items-center gap-1"
+                                    >
+                                        <Pencil class="h-3 w-3" /> Edit
+                                    </button>
+                                    <button
+                                        @click="openAdjust(item)"
+                                        class="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
+                                    >
+                                        Adjust
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="filtered.length === 0">
@@ -289,6 +327,13 @@ const typeColor: Record<string, string> = {
                                     class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                             </div>
                         </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Cost per Unit (₱)</label>
+                            <input v-model.number="newIngredient.cost_per_unit" type="number" min="0" step="0.01"
+                                placeholder="0.00"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                            <p class="text-xs text-muted-foreground mt-1">Used to calculate product cost and COGS for P&L reports.</p>
+                        </div>
                     </div>
                     <div class="p-5 border-t flex gap-3">
                         <button @click="showAddIngredient = false"
@@ -376,6 +421,62 @@ const typeColor: Record<string, string> = {
         </Transition>
     </Teleport>
 </template>
+
+    <!-- Edit Ingredient Modal -->
+    <Teleport to="body">
+        <Transition name="fade">
+            <div
+                v-if="editingIngredient"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                @click.self="editingIngredient = null"
+            >
+                <div class="w-full max-w-md rounded-2xl bg-background shadow-2xl">
+                    <div class="p-5 border-b flex items-center justify-between">
+                        <h3 class="text-lg font-bold">Edit Ingredient</h3>
+                        <button @click="editingIngredient = null" class="rounded-full p-1 hover:bg-muted">
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Name *</label>
+                            <input v-model="editForm.name" type="text"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Unit *</label>
+                            <input v-model="editForm.unit" type="text" placeholder="e.g. kg, pcs, liters"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Minimum Stock</label>
+                            <input v-model.number="editForm.min_quantity" type="number" min="0" step="0.01"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Cost per Unit (₱)</label>
+                            <input v-model.number="editForm.cost_per_unit" type="number" min="0" step="0.0001"
+                                placeholder="0.00"
+                                class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                            <p class="text-xs text-muted-foreground mt-1">
+                                Cost per {{ editForm.unit || 'unit' }}. Used to calculate product COGS for P&L reports.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="p-5 border-t flex gap-3">
+                        <button @click="editingIngredient = null"
+                            class="flex-1 rounded-lg border py-2 text-sm font-medium hover:bg-muted">
+                            Cancel
+                        </button>
+                        <button @click="submitEdit" :disabled="savingEdit"
+                            class="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                            {{ savingEdit ? 'Saving…' : 'Save Changes' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
 
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }

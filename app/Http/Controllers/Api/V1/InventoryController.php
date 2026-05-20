@@ -29,6 +29,7 @@ class InventoryController extends Controller
             'unit'             => 'required|string|max:50',
             'current_quantity' => 'required|numeric|min:0',
             'min_quantity'     => 'required|numeric|min:0',
+            'cost_per_unit'    => 'nullable|numeric|min:0',
             'track_inventory'  => 'boolean',
         ]);
 
@@ -36,9 +37,30 @@ class InventoryController extends Controller
             ...$data,
             'is_active'       => true,
             'track_inventory' => $data['track_inventory'] ?? true,
+            'cost_per_unit'   => $data['cost_per_unit'] ?? 0,
         ]);
 
         return response()->json(new InventoryResource($ingredient), 201);
+    }
+
+    public function update(\Illuminate\Http\Request $request, Ingredient $ingredient): JsonResponse
+    {
+        if (! auth()->user()?->hasAnyRole('admin', 'auditor')) {
+            abort(403, 'Unauthorized');
+        }
+
+        $data = $request->validate([
+            'name'           => 'sometimes|string|max:255',
+            'unit'           => 'sometimes|string|max:50',
+            'min_quantity'   => 'sometimes|numeric|min:0',
+            'cost_per_unit'  => 'sometimes|numeric|min:0',
+            'track_inventory' => 'boolean',
+            'is_active'      => 'boolean',
+        ]);
+
+        $ingredient->update($data);
+
+        return response()->json(new InventoryResource($ingredient->fresh()));
     }
 
     public function index(): JsonResponse
