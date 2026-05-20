@@ -5,22 +5,49 @@ namespace App\Http\Controllers;
 use App\Models\Ingredient;
 use App\Models\Order;
 use App\Services\InventoryService;
+use App\Services\ReportService;
+use Carbon\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __construct(private InventoryService $inventoryService) {}
+    public function __construct(
+        private InventoryService $inventoryService,
+        private ReportService $reportService,
+    ) {}
 
     public function index(): Response
     {
         $user = auth()->user();
         $stats = $this->buildStats($user);
 
+        $pl = null;
+        if ($user->hasAnyRole(['admin', 'auditor'])) {
+            $pl = $this->buildMonthlyPl();
+        }
+
         return Inertia::render('Dashboard', [
             'stats' => $stats,
             'recentOrders' => $this->recentOrders(),
+            'pl' => $pl,
         ]);
+    }
+
+    private function buildMonthlyPl(): array
+    {
+        $start = Carbon::now()->startOfMonth();
+        $end   = Carbon::now()->endOfMonth();
+        $report = $this->reportService->getProfitLossReport($start, $end);
+
+        return [
+            'revenue'      => $report['revenue']['net_revenue'],
+            'cogs'         => $report['cogs']['total'],
+            'gross_profit' => $report['gross_profit'],
+            'expenses'     => $report['expenses']['total'],
+            'net_profit'   => $report['net_profit'],
+            'net_margin'   => $report['net_margin'],
+        ];
     }
 
     private function buildStats($user): array

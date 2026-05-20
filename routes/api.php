@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\HrisController;
 
 Route::middleware('auth')->get('/user', function (Request $request) {
     return $request->user();
@@ -75,5 +76,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/financial-transactions', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'index']);
         Route::get('/financial-transactions/summary', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'summary']);
         Route::post('/financial-transactions', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'store']);
+
+        // HRIS — Employees
+        Route::get('/hris/employees', [HrisController::class, 'employees']);
+        Route::post('/hris/employees', [HrisController::class, 'storeEmployee']);
+        Route::put('/hris/employees/{employee}', [HrisController::class, 'updateEmployee']);
+        Route::delete('/hris/employees/{employee}', [HrisController::class, 'destroyEmployee']);
+
+        // HRIS — Payroll
+        Route::get('/hris/payroll', [HrisController::class, 'payrollRecords']);
+        Route::post('/hris/payroll', [HrisController::class, 'storePayroll']);
+        Route::post('/hris/payroll/{payrollRecord}/pay', [HrisController::class, 'markPayrollPaid']);
+        Route::delete('/hris/payroll/{payrollRecord}', [HrisController::class, 'destroyPayroll']);
     });
 });

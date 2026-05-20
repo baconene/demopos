@@ -10,6 +10,7 @@ use App\Http\Controllers\InventoryPageController;
 use App\Http\Controllers\ProductPageController;
 use App\Http\Controllers\ReportPageController;
 use App\Http\Controllers\OrderDetailPageController;
+use App\Http\Controllers\HrisPageController;
 
 Route::inertia('/', 'Welcome', [
     'canRegister' => Features::enabled(Features::registration()),
@@ -51,6 +52,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports', [ReportPageController::class, 'index'])
         ->name('reports.index')
         ->middleware('can:view reports');
+
+    // HRIS
+    Route::get('hris', [HrisPageController::class, 'index'])
+        ->name('hris.index')
+        ->middleware('role:admin');
 });
 
 require __DIR__.'/settings.php';

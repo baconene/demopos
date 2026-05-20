@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Head, Link, usePage } from '@inertiajs/vue3'
-import { ShoppingCart, ChefHat, Package, BarChart3, ClipboardList, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-vue-next'
+import { ShoppingCart, ChefHat, Package, BarChart3, ClipboardList, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Users } from 'lucide-vue-next'
 
 defineOptions({
     layout: {
@@ -9,9 +9,19 @@ defineOptions({
     },
 })
 
+interface PlSummary {
+    revenue: number
+    cogs: number
+    gross_profit: number
+    expenses: number
+    net_profit: number
+    net_margin: number
+}
+
 const props = defineProps<{
     stats: Record<string, number>
     recentOrders: any[]
+    pl: PlSummary | null
 }>()
 
 const page = usePage()
@@ -87,6 +97,14 @@ const greeting = computed(() => {
                 <BarChart3 class="h-8 w-8 text-purple-600" />
                 <span class="text-sm font-semibold">Reports</span>
             </Link>
+            <Link
+                v-if="hasRole('admin')"
+                href="/hris"
+                class="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 text-center shadow-sm transition hover:shadow-md hover:border-primary"
+            >
+                <Users class="h-8 w-8 text-indigo-600" />
+                <span class="text-sm font-semibold">HRIS</span>
+            </Link>
         </div>
 
         <!-- Stats Grid -->
@@ -154,6 +172,41 @@ const greeting = computed(() => {
                     <p class="text-xs text-muted-foreground mt-1">of {{ stats.total_ingredients ?? 0 }} ingredients</p>
                 </div>
             </template>
+        </div>
+
+        <!-- P&L Summary (admin/auditor) -->
+        <div v-if="pl && (hasRole('admin') || hasRole('auditor'))" class="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b">
+                <h2 class="font-semibold text-base">P&amp;L — This Month</h2>
+                <Link href="/reports" class="text-xs text-muted-foreground hover:text-primary">View full report →</Link>
+            </div>
+            <div class="grid grid-cols-2 gap-0 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x">
+                <div class="p-4">
+                    <p class="text-xs text-muted-foreground mb-1">Revenue</p>
+                    <p class="text-lg font-bold text-green-600">₱{{ formatCurrency(pl.revenue) }}</p>
+                </div>
+                <div class="p-4">
+                    <p class="text-xs text-muted-foreground mb-1">COGS</p>
+                    <p class="text-lg font-bold">₱{{ formatCurrency(pl.cogs) }}</p>
+                </div>
+                <div class="p-4">
+                    <p class="text-xs text-muted-foreground mb-1">Gross Profit</p>
+                    <p class="text-lg font-bold" :class="pl.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'">
+                        ₱{{ formatCurrency(pl.gross_profit) }}
+                    </p>
+                </div>
+                <div class="p-4">
+                    <p class="text-xs text-muted-foreground mb-1">Expenses</p>
+                    <p class="text-lg font-bold text-orange-600">₱{{ formatCurrency(pl.expenses) }}</p>
+                </div>
+                <div class="p-4" :class="pl.net_profit >= 0 ? 'bg-green-50 dark:bg-green-950/20' : 'bg-red-50 dark:bg-red-950/20'">
+                    <p class="text-xs text-muted-foreground mb-1">Net Profit</p>
+                    <p class="text-lg font-bold" :class="pl.net_profit >= 0 ? 'text-green-700' : 'text-red-600'">
+                        ₱{{ formatCurrency(pl.net_profit) }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">{{ pl.net_margin }}% margin</p>
+                </div>
+            </div>
         </div>
 
         <!-- Recent Orders -->

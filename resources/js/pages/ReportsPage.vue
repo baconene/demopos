@@ -68,10 +68,10 @@ const tabs: { key: Tab; label: string }[] = [
     { key: 'orders',    label: 'Orders' },
     { key: 'inventory', label: 'Inventory' },
     { key: 'financial', label: 'Financial' },
-    { key: 'pl',        label: 'P&L' },
     { key: 'daily',     label: 'Daily Sales' },
     { key: 'monthly',   label: 'Monthly Sales' },
     { key: 'products',  label: 'Product Sales' },
+    { key: 'pl',        label: 'P&L' },
 ]
 
 // ── Daily / Monthly ────────────────────────────────────────────────────────────
