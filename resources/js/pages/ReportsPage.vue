@@ -33,6 +33,7 @@ interface FtSummary {
     orders: { total: number; count: number }
     payments: { total: number; count: number }
     expenses: { total: number; count: number }
+    income_adjustments: { total: number; count: number }
     net: number
     by_tender: { tender: string; total: number; count: number }[]
 }
@@ -108,12 +109,14 @@ const invPage = ref(1)
 const ingredients = ref<Ingredient[]>([])
 
 // ── P&L ───────────────────────────────────────────────────────────────────────
+interface PLBreakdownItem { description: string; amount: number; transacted_at: string }
 interface PL {
     period: { start: string; end: string }
     revenue: { order_count: number; gross_sales: number; discounts: number; net_revenue: number }
     cogs: { total: number; has_data: boolean }
     gross_profit: number; gross_margin: number
-    expenses: { total: number; count: number; breakdown: { description: string; amount: number; transacted_at: string }[] }
+    income_adjustments: { total: number; count: number; breakdown: PLBreakdownItem[] }
+    expenses: { total: number; count: number; breakdown: PLBreakdownItem[] }
     net_profit: number; net_margin: number
 }
 const plStartDate = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
@@ -127,9 +130,9 @@ const ftTypeFilter = ref('')
 const ftSummary = ref<FtSummary | null>(null)
 const ftTransactions = ref<FtTransaction[]>([])
 const ftMeta = ref<any>(null)
-const showExpenseForm = ref(false)
-const expenseForm = ref({ description: '', amount: '', notes: '' })
-const expenseSaving = ref(false)
+const showEntryForm = ref(false)
+const entryForm = ref({ type: 'expense' as 'expense' | 'income_adjustment', description: '', amount: '', notes: '', transacted_at: '' })
+const entrySaving = ref(false)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -172,12 +175,16 @@ const invTypeBadge = (t: string) => ({
     purchase:   'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 }[t] ?? 'bg-muted text-muted-foreground')
 
-const typeLabel = (t: string) => ({ order: 'Order', payment: 'Payment', expense: 'Expense' }[t] ?? t)
+const typeLabel = (t: string) => ({
+    order: 'Order', payment: 'Payment', expense: 'Expense', income_adjustment: 'Income Adj.',
+}[t] ?? t)
 const typeBadgeClass = (t: string) => ({
-    order:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    payment: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    expense: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    order:             'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    payment:           'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    expense:           'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    income_adjustment: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
 }[t] ?? 'bg-muted text-muted-foreground')
+const isCredit = (t: string) => t === 'payment' || t === 'income_adjustment'
 
 const orderTypeBadge = (t: string) => ({ dine_in: 'Dine-In', takeout: 'Takeout', delivery: 'Delivery' }[t] ?? t)
 
@@ -275,24 +282,26 @@ const generateReport = async () => {
     }
 }
 
-const saveExpense = async () => {
-    if (!expenseForm.value.description.trim() || !expenseForm.value.amount) return
-    expenseSaving.value = true
+const saveEntry = async () => {
+    if (!entryForm.value.description.trim() || !entryForm.value.amount) return
+    entrySaving.value = true
     try {
         await api.post('/api/v1/financial-transactions', {
-            type: 'expense',
-            amount: parseFloat(expenseForm.value.amount),
-            description: expenseForm.value.description,
-            notes: expenseForm.value.notes || null,
+            type: entryForm.value.type,
+            amount: parseFloat(entryForm.value.amount),
+            description: entryForm.value.description,
+            notes: entryForm.value.notes || null,
+            transacted_at: entryForm.value.transacted_at || null,
         })
-        toast.success('Expense recorded')
-        expenseForm.value = { description: '', amount: '', notes: '' }
-        showExpenseForm.value = false
+        const label = entryForm.value.type === 'income_adjustment' ? 'Income adjustment' : 'Expense'
+        toast.success(`${label} recorded.`)
+        entryForm.value = { type: 'expense', description: '', amount: '', notes: '', transacted_at: '' }
+        showEntryForm.value = false
         await loadFinancial()
     } catch (err: any) {
-        toast.error(err.response?.data?.message ?? 'Failed to save expense')
+        toast.error(err.response?.data?.message ?? 'Failed to save entry.')
     } finally {
-        expenseSaving.value = false
+        entrySaving.value = false
     }
 }
 
@@ -483,6 +492,7 @@ onMounted(async () => {
                             <option value="order">Orders</option>
                             <option value="payment">Payments</option>
                             <option value="expense">Expenses</option>
+                            <option value="income_adjustment">Income Adjustments</option>
                         </select></div>
                 </template>
 
@@ -659,7 +669,7 @@ onMounted(async () => {
 
         <!-- ── Financial ──────────────────────────────────────────────────────── -->
         <template v-if="tab === 'financial'">
-            <div v-if="ftSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div v-if="ftSummary" class="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><BarChart3 class="h-3 w-3" /> Orders</p>
                     <p class="text-2xl font-black">{{ ftSummary.orders.count }}</p>
@@ -675,10 +685,15 @@ onMounted(async () => {
                     <p class="text-2xl font-black">{{ ftSummary.expenses.count }}</p>
                     <p class="text-sm font-semibold text-red-600 mt-0.5">{{ fmt(ftSummary.expenses.total) }}</p>
                 </div>
+                <div class="rounded-xl border bg-card p-4 shadow-sm">
+                    <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingUp class="h-3 w-3 text-teal-500" /> Income Adj.</p>
+                    <p class="text-2xl font-black">{{ ftSummary.income_adjustments?.count ?? 0 }}</p>
+                    <p class="text-sm font-semibold text-teal-600 mt-0.5">{{ fmt(ftSummary.income_adjustments?.total ?? 0) }}</p>
+                </div>
                 <div :class="['rounded-xl border p-4 shadow-sm', ftSummary.net >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800']">
                     <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><DollarSign class="h-3 w-3" /> Net Cash</p>
                     <p class="text-2xl font-black" :class="ftSummary.net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600'">{{ fmt(ftSummary.net) }}</p>
-                    <p class="text-xs text-muted-foreground mt-0.5">Payments − Expenses</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">Payments + Adj. − Expenses</p>
                 </div>
             </div>
 
@@ -697,31 +712,71 @@ onMounted(async () => {
 
             <div class="flex items-center justify-between">
                 <h3 class="font-bold text-sm text-muted-foreground uppercase tracking-wider">Transaction Log</h3>
-                <button @click="showExpenseForm = !showExpenseForm" class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted transition">
-                    <Plus v-if="!showExpenseForm" class="h-3.5 w-3.5" />
+                <button @click="showEntryForm = !showEntryForm" class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted transition">
+                    <Plus v-if="!showEntryForm" class="h-3.5 w-3.5" />
                     <X v-else class="h-3.5 w-3.5" />
-                    {{ showExpenseForm ? 'Cancel' : 'Record Expense' }}
+                    {{ showEntryForm ? 'Cancel' : 'Add Entry' }}
                 </button>
             </div>
 
-            <div v-if="showExpenseForm" class="rounded-xl border bg-card shadow-sm p-4">
-                <h4 class="font-semibold text-sm mb-3">New Expense</h4>
-                <div class="grid sm:grid-cols-3 gap-3">
+            <div v-if="showEntryForm" class="rounded-xl border bg-card shadow-sm p-4">
+                <!-- Type selector -->
+                <div class="flex gap-2 mb-4">
+                    <button
+                        @click="entryForm.type = 'expense'"
+                        :class="[
+                            'flex-1 rounded-lg border-2 py-2 text-sm font-semibold transition',
+                            entryForm.type === 'expense'
+                                ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                                : 'border-border text-muted-foreground hover:bg-muted',
+                        ]"
+                    >
+                        Expense / Debit
+                    </button>
+                    <button
+                        @click="entryForm.type = 'income_adjustment'"
+                        :class="[
+                            'flex-1 rounded-lg border-2 py-2 text-sm font-semibold transition',
+                            entryForm.type === 'income_adjustment'
+                                ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/20 dark:text-teal-400'
+                                : 'border-border text-muted-foreground hover:bg-muted',
+                        ]"
+                    >
+                        Income Adjustment / Credit
+                    </button>
+                </div>
+                <div class="grid sm:grid-cols-4 gap-3">
                     <div class="sm:col-span-2">
-                        <label class="text-xs font-medium text-muted-foreground block mb-1">Description</label>
-                        <input v-model="expenseForm.description" type="text" placeholder="e.g. Charcoal supply, LPG refill" class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        <label class="text-xs font-medium text-muted-foreground block mb-1">Description *</label>
+                        <input v-model="entryForm.description" type="text"
+                            :placeholder="entryForm.type === 'expense' ? 'e.g. Charcoal supply, LPG refill' : 'e.g. Supplier rebate, cash correction'"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
                     <div>
-                        <label class="text-xs font-medium text-muted-foreground block mb-1">Amount (₱)</label>
-                        <input v-model="expenseForm.amount" type="number" min="0.01" step="0.01" placeholder="0.00" class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        <label class="text-xs font-medium text-muted-foreground block mb-1">Amount (₱) *</label>
+                        <input v-model="entryForm.amount" type="number" min="0.01" step="0.01" placeholder="0.00"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div class="sm:col-span-2">
+                    <div>
+                        <label class="text-xs font-medium text-muted-foreground block mb-1">Date (optional)</label>
+                        <input v-model="entryForm.transacted_at" type="date"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                    </div>
+                    <div class="sm:col-span-3">
                         <label class="text-xs font-medium text-muted-foreground block mb-1">Notes (optional)</label>
-                        <input v-model="expenseForm.notes" type="text" placeholder="Additional details" class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                        <input v-model="entryForm.notes" type="text" placeholder="Additional details"
+                            class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
                     <div class="flex items-end">
-                        <button @click="saveExpense" :disabled="expenseSaving" class="w-full rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                            {{ expenseSaving ? 'Saving…' : 'Save Expense' }}
+                        <button
+                            @click="saveEntry"
+                            :disabled="entrySaving || !entryForm.description.trim() || !entryForm.amount"
+                            :class="[
+                                'w-full rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-50 transition',
+                                entryForm.type === 'expense' ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700',
+                            ]"
+                        >
+                            {{ entrySaving ? 'Saving…' : (entryForm.type === 'expense' ? 'Save Expense' : 'Save Credit') }}
                         </button>
                     </div>
                 </div>
@@ -746,8 +801,8 @@ onMounted(async () => {
                                 <td class="px-4 py-2"><span :class="['rounded-full px-2 py-0.5 text-xs font-semibold', typeBadgeClass(tx.type)]">{{ typeLabel(tx.type) }}</span></td>
                                 <td class="px-4 py-2 max-w-xs truncate">{{ tx.description }}</td>
                                 <td class="px-4 py-2 text-muted-foreground">{{ tx.tender?.name ?? '—' }}</td>
-                                <td class="px-4 py-2 text-right font-bold" :class="tx.type === 'expense' ? 'text-red-600' : 'text-green-600'">
-                                    {{ tx.type === 'expense' ? '-' : '' }}{{ fmt(tx.amount) }}
+                                <td class="px-4 py-2 text-right font-bold" :class="isCredit(tx.type) ? 'text-green-600' : 'text-red-600'">
+                                    {{ isCredit(tx.type) ? '+' : '-' }}{{ fmt(tx.amount) }}
                                 </td>
                                 <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.user?.name ?? '—' }}</td>
                             </tr>
@@ -809,6 +864,22 @@ onMounted(async () => {
                             </div>
                         </div>
 
+                        <!-- Other Income (income adjustments) -->
+                        <div v-if="(plReport.income_adjustments?.total ?? 0) > 0" class="px-5 py-4 space-y-2">
+                            <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Other Income / Credit Adjustments ({{ plReport.income_adjustments.count }})</p>
+                            <div class="space-y-1">
+                                <div v-for="adj in plReport.income_adjustments.breakdown" :key="adj.transacted_at + adj.description"
+                                    class="flex justify-between text-xs text-muted-foreground pl-2">
+                                    <span class="truncate max-w-xs">{{ adj.description }} <span class="opacity-60">— {{ adj.transacted_at?.slice(0, 10) }}</span></span>
+                                    <span class="shrink-0 ml-4 text-teal-600">+{{ fmt(adj.amount) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between text-sm font-semibold border-t pt-2">
+                                <span>Total Other Income</span>
+                                <span class="text-teal-600">+{{ fmt(plReport.income_adjustments.total) }}</span>
+                            </div>
+                        </div>
+
                         <!-- Operating Expenses -->
                         <div class="px-5 py-4 space-y-2">
                             <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Operating Expenses ({{ plReport.expenses.count }})</p>
@@ -844,7 +915,7 @@ onMounted(async () => {
                 </div>
 
                 <!-- Summary cards -->
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <div class="rounded-xl border bg-card p-4 shadow-sm">
                         <p class="text-xs text-muted-foreground mb-1">Gross Sales</p>
                         <p class="text-xl font-black">{{ fmt(plReport.revenue.gross_sales) }}</p>
@@ -852,6 +923,10 @@ onMounted(async () => {
                     <div class="rounded-xl border bg-card p-4 shadow-sm">
                         <p class="text-xs text-muted-foreground mb-1">COGS</p>
                         <p class="text-xl font-black text-red-500">{{ fmt(plReport.cogs.total) }}</p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <p class="text-xs text-muted-foreground mb-1">Other Income</p>
+                        <p class="text-xl font-black text-teal-600">{{ fmt(plReport.income_adjustments?.total ?? 0) }}</p>
                     </div>
                     <div class="rounded-xl border bg-card p-4 shadow-sm">
                         <p class="text-xs text-muted-foreground mb-1">Expenses</p>

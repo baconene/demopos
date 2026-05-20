@@ -40,32 +40,37 @@ class FinancialTransactionController extends Controller {
                 'count'  => $r->count,
             ]);
 
+        $incomeAdj = (float)($rows['income_adjustment']?->total ?? 0);
+        $expenses  = (float)($rows['expense']?->total ?? 0);
+        $payments  = (float)($rows['payment']?->total ?? 0);
+
         return response()->json([
-            'period'    => ['start' => $start->toDateString(), 'end' => $end->toDateString()],
-            'orders'    => ['total' => (float)($rows['order']?->total   ?? 0), 'count' => $rows['order']?->count   ?? 0],
-            'payments'  => ['total' => (float)($rows['payment']?->total ?? 0), 'count' => $rows['payment']?->count ?? 0],
-            'expenses'  => ['total' => (float)($rows['expense']?->total ?? 0), 'count' => $rows['expense']?->count ?? 0],
-            'net'       => (float)(($rows['payment']?->total ?? 0) - ($rows['expense']?->total ?? 0)),
-            'by_tender' => $byTender,
+            'period'             => ['start' => $start->toDateString(), 'end' => $end->toDateString()],
+            'orders'             => ['total' => (float)($rows['order']?->total   ?? 0), 'count' => $rows['order']?->count   ?? 0],
+            'payments'           => ['total' => $payments,   'count' => $rows['payment']?->count  ?? 0],
+            'expenses'           => ['total' => $expenses,   'count' => $rows['expense']?->count  ?? 0],
+            'income_adjustments' => ['total' => $incomeAdj,  'count' => $rows['income_adjustment']?->count ?? 0],
+            'net'                => $payments + $incomeAdj - $expenses,
+            'by_tender'          => $byTender,
         ]);
     }
 
     public function store(Request $request): JsonResponse {
         if (! auth()->user()?->hasAnyRole('admin', 'auditor')) abort(403);
         $data = $request->validate([
-            'type'        => 'required|in:expense',
-            'amount'      => 'required|numeric|min:0.01',
-            'description' => 'required|string|max:255',
-            'notes'       => 'nullable|string',
+            'type'          => 'required|in:expense,income_adjustment',
+            'amount'        => 'required|numeric|min:0.01',
+            'description'   => 'required|string|max:255',
+            'notes'         => 'nullable|string',
             'transacted_at' => 'nullable|date',
         ]);
         $tx = FinancialTransaction::create([
-            'type'           => 'expense',
-            'amount'         => $data['amount'],
-            'description'    => $data['description'],
-            'notes'          => $data['notes'] ?? null,
-            'user_id'        => auth()->id(),
-            'transacted_at'  => $data['transacted_at'] ?? now(),
+            'type'          => $data['type'],
+            'amount'        => $data['amount'],
+            'description'   => $data['description'],
+            'notes'         => $data['notes'] ?? null,
+            'user_id'       => auth()->id(),
+            'transacted_at' => $data['transacted_at'] ?? now(),
         ]);
         return response()->json($tx, 201);
     }

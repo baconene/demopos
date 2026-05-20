@@ -103,13 +103,32 @@ class ReportService
             ->orderByDesc('transacted_at')
             ->get(['description', 'amount', 'transacted_at'])
             ->map(fn ($e) => [
-                'description'    => $e->description,
-                'amount'         => (float) $e->amount,
-                'transacted_at'  => $e->transacted_at,
+                'description'   => $e->description,
+                'amount'        => (float) $e->amount,
+                'transacted_at' => $e->transacted_at,
             ]);
 
-        $netProfit = $grossProfit - $totalExpenses;
-        $netMargin = $netRevenue > 0 ? round(($netProfit / $netRevenue) * 100, 2) : 0;
+        // Income adjustments (credit entries recorded manually)
+        $incomeAdjRows = \App\Models\FinancialTransaction::where('type', 'income_adjustment')
+            ->whereBetween('transacted_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->selectRaw('COALESCE(SUM(amount), 0) as total, COUNT(*) as count')
+            ->first();
+
+        $totalIncomeAdj = (float) ($incomeAdjRows->total ?? 0);
+
+        $incomeAdjBreakdown = \App\Models\FinancialTransaction::where('type', 'income_adjustment')
+            ->whereBetween('transacted_at', [$start->startOfDay(), $end->copy()->endOfDay()])
+            ->orderByDesc('transacted_at')
+            ->get(['description', 'amount', 'transacted_at'])
+            ->map(fn ($e) => [
+                'description'   => $e->description,
+                'amount'        => (float) $e->amount,
+                'transacted_at' => $e->transacted_at,
+            ]);
+
+        $netProfit = $grossProfit + $totalIncomeAdj - $totalExpenses;
+        $totalRevenuePlusAdj = $netRevenue + $totalIncomeAdj;
+        $netMargin = $totalRevenuePlusAdj > 0 ? round(($netProfit / $totalRevenuePlusAdj) * 100, 2) : 0;
 
         // Flag if COGS data is incomplete (orders exist but all have zero cost)
         $hasCogs = $cogs > 0;
@@ -127,18 +146,23 @@ class ReportService
                 'net_revenue' => $netRevenue,
             ],
             'cogs' => [
-                'total'       => $cogs,
-                'has_data'    => $hasCogs,
+                'total'    => $cogs,
+                'has_data' => $hasCogs,
             ],
-            'gross_profit'  => $grossProfit,
-            'gross_margin'  => $grossMargin,
+            'gross_profit' => $grossProfit,
+            'gross_margin' => $grossMargin,
+            'income_adjustments' => [
+                'total'     => $totalIncomeAdj,
+                'count'     => (int) ($incomeAdjRows->count ?? 0),
+                'breakdown' => $incomeAdjBreakdown,
+            ],
             'expenses' => [
                 'total'     => $totalExpenses,
                 'count'     => $expenseCount,
                 'breakdown' => $expenseBreakdown,
             ],
-            'net_profit'    => $netProfit,
-            'net_margin'    => $netMargin,
+            'net_profit' => $netProfit,
+            'net_margin' => $netMargin,
         ];
     }
 }
