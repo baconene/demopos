@@ -8,6 +8,7 @@ class Ingredient extends Model
 {
     protected $fillable = [
         'name',
+        'item_type',
         'unit',
         'current_quantity',
         'min_quantity',

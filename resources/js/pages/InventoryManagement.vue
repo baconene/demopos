@@ -15,9 +15,18 @@ defineOptions({
 })
 
 interface Ingredient {
-    id: number; name: string; unit: string
+    id: number; name: string; item_type: string; unit: string
     current_quantity: number; min_quantity: number; cost_per_unit: number; is_low_stock: boolean
 }
+
+const ITEM_TYPES = [
+    { value: 'ingredient', label: 'Ingredient',  color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
+    { value: 'tool',       label: 'Tool',        color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+    { value: 'equipment',  label: 'Equipment',   color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' },
+    { value: 'supply',     label: 'Supply',      color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+]
+const itemTypeColor = (t: string) => ITEM_TYPES.find(x => x.value === t)?.color ?? 'bg-muted text-muted-foreground'
+const itemTypeLabel = (t: string) => ITEM_TYPES.find(x => x.value === t)?.label ?? t
 interface Transaction {
     id: number; ingredient_name: string; type: string; quantity: number
     old_quantity: number; new_quantity: number; user_name: string; notes: string | null; created_at: string
@@ -26,6 +35,7 @@ interface Transaction {
 const props = defineProps<{ ingredients: Ingredient[]; recentTransactions: Transaction[] }>()
 
 const search = ref('')
+const typeFilter = ref('') // '' = all
 const selectedItem = ref<Ingredient | null>(null)
 const adjustType = ref('stock_in')
 const adjustQty = ref<number>(0)
@@ -35,6 +45,7 @@ const showLowOnly = ref(false)
 
 const filtered = computed(() => {
     let list = props.ingredients
+    if (typeFilter.value) list = list.filter((i) => i.item_type === typeFilter.value)
     if (showLowOnly.value) list = list.filter((i) => i.is_low_stock)
     if (search.value.trim()) {
         const q = search.value.toLowerCase()
@@ -78,10 +89,10 @@ const submitAdjustment = async () => {
 // ─── Add Ingredient ───────────────────────────────────────────────────────────
 const showAddIngredient = ref(false)
 const addingIngredient  = ref(false)
-const newIngredient = ref({ name: '', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 })
+const newIngredient = ref({ name: '', item_type: 'ingredient', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 })
 
 const openAddIngredient = () => {
-    newIngredient.value = { name: '', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 }
+    newIngredient.value = { name: '', item_type: 'ingredient', unit: '', current_quantity: 0, min_quantity: 0, cost_per_unit: 0 }
     showAddIngredient.value = true
 }
 
@@ -105,13 +116,14 @@ const submitAddIngredient = async () => {
 
 // ─── Edit Ingredient ──────────────────────────────────────────────────────────
 const editingIngredient = ref<Ingredient | null>(null)
-const editForm = ref({ name: '', unit: '', min_quantity: 0, cost_per_unit: 0 })
+const editForm = ref({ name: '', item_type: 'ingredient', unit: '', min_quantity: 0, cost_per_unit: 0 })
 const savingEdit = ref(false)
 
 const openEdit = (item: Ingredient) => {
     editingIngredient.value = item
     editForm.value = {
         name:          item.name,
+        item_type:     item.item_type ?? 'ingredient',
         unit:          item.unit,
         min_quantity:  item.min_quantity,
         cost_per_unit: item.cost_per_unit,
@@ -152,7 +164,7 @@ const typeColor: Record<string, string> = {
             <AlertTriangle class="h-5 w-5 text-red-500 shrink-0" />
             <div class="flex-1">
                 <p class="font-semibold text-red-700 dark:text-red-400 text-sm">
-                    {{ lowCount }} ingredient{{ lowCount > 1 ? 's are' : ' is' }} below minimum stock level
+                    {{ lowCount }} item{{ lowCount > 1 ? 's are' : ' is' }} below minimum stock level
                 </p>
                 <p class="text-xs text-red-600/70 dark:text-red-400/70">Review and restock as needed</p>
             </div>
@@ -161,12 +173,25 @@ const typeColor: Record<string, string> = {
             </button>
         </div>
 
+        <!-- Type filter tabs -->
+        <div class="flex flex-wrap gap-1 rounded-xl border bg-card p-1.5 shadow-sm">
+            <button
+                @click="typeFilter = ''"
+                :class="['rounded-lg px-3 py-1.5 text-sm font-medium transition', typeFilter === '' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground']"
+            >All Items</button>
+            <button
+                v-for="t in ITEM_TYPES" :key="t.value"
+                @click="typeFilter = t.value"
+                :class="['rounded-lg px-3 py-1.5 text-sm font-medium transition', typeFilter === t.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground']"
+            >{{ t.label }}s</button>
+        </div>
+
         <!-- Controls -->
         <div class="flex items-center gap-3 flex-wrap">
             <input
                 v-model="search"
                 type="text"
-                placeholder="Search ingredients…"
+                placeholder="Search inventory…"
                 class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary flex-1 min-w-48"
             />
             <button
@@ -179,7 +204,7 @@ const typeColor: Record<string, string> = {
                 @click="openAddIngredient"
                 class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
-                <Plus class="h-3.5 w-3.5" /> Add Ingredient
+                <Plus class="h-3.5 w-3.5" /> Add Item
             </button>
         </div>
 
@@ -189,7 +214,8 @@ const typeColor: Record<string, string> = {
                 <table class="w-full text-sm">
                     <thead class="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
                         <tr>
-                            <th class="px-4 py-3 text-left">Ingredient</th>
+                            <th class="px-4 py-3 text-left">Item</th>
+                            <th class="px-4 py-3 text-left">Type</th>
                             <th class="px-4 py-3 text-left">Unit</th>
                             <th class="px-4 py-3 text-right">Current Stock</th>
                             <th class="px-4 py-3 text-right">Minimum</th>
@@ -203,6 +229,11 @@ const typeColor: Record<string, string> = {
                             <td class="px-4 py-3 font-medium flex items-center gap-2">
                                 <Package class="h-4 w-4 text-muted-foreground shrink-0" />
                                 {{ item.name }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', itemTypeColor(item.item_type)]">
+                                    {{ itemTypeLabel(item.item_type) }}
+                                </span>
                             </td>
                             <td class="px-4 py-3 text-muted-foreground">{{ item.unit }}</td>
                             <td class="px-4 py-3 text-right font-bold" :class="item.is_low_stock ? 'text-red-600' : ''">
@@ -233,7 +264,7 @@ const typeColor: Record<string, string> = {
                             </td>
                         </tr>
                         <tr v-if="filtered.length === 0">
-                            <td colspan="7" class="px-4 py-10 text-center text-muted-foreground text-sm">
+                            <td colspan="8" class="px-4 py-10 text-center text-muted-foreground text-sm">
                                 No ingredients found.
                             </td>
                         </tr>
@@ -279,7 +310,7 @@ const typeColor: Record<string, string> = {
                             </td>
                         </tr>
                         <tr v-if="recentTransactions.length === 0">
-                            <td colspan="7" class="px-4 py-8 text-center text-muted-foreground text-sm">
+                            <td colspan="8" class="px-4 py-8 text-center text-muted-foreground text-sm">
                                 No recent transactions.
                             </td>
                         </tr>
@@ -299,12 +330,22 @@ const typeColor: Record<string, string> = {
             >
                 <div class="w-full max-w-md rounded-2xl bg-background shadow-2xl">
                     <div class="p-5 border-b flex items-center justify-between">
-                        <h3 class="text-lg font-bold">Add Ingredient</h3>
+                        <h3 class="text-lg font-bold">Add Inventory Item</h3>
                         <button @click="showAddIngredient = false" class="rounded-full p-1 hover:bg-muted">
                             <X class="h-4 w-4" />
                         </button>
                     </div>
                     <div class="p-5 space-y-4">
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Item Type *</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label v-for="t in ITEM_TYPES" :key="t.value"
+                                    :class="['flex items-center gap-2 rounded-lg border p-2.5 cursor-pointer transition', newIngredient.item_type === t.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/40']">
+                                    <input type="radio" v-model="newIngredient.item_type" :value="t.value" class="accent-primary" />
+                                    <span :class="['rounded-full px-2 py-0.5 text-xs font-semibold', t.color]">{{ t.label }}</span>
+                                </label>
+                            </div>
+                        </div>
                         <div>
                             <label class="text-xs font-medium text-muted-foreground block mb-1.5">Name *</label>
                             <input v-model="newIngredient.name" type="text" placeholder="e.g. Pork Ribs"
@@ -437,6 +478,16 @@ const typeColor: Record<string, string> = {
                         </button>
                     </div>
                     <div class="p-5 space-y-4">
+                        <div>
+                            <label class="text-xs font-medium text-muted-foreground block mb-1.5">Item Type *</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label v-for="t in ITEM_TYPES" :key="t.value"
+                                    :class="['flex items-center gap-2 rounded-lg border p-2.5 cursor-pointer transition', editForm.item_type === t.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/40']">
+                                    <input type="radio" v-model="editForm.item_type" :value="t.value" class="accent-primary" />
+                                    <span :class="['rounded-full px-2 py-0.5 text-xs font-semibold', t.color]">{{ t.label }}</span>
+                                </label>
+                            </div>
+                        </div>
                         <div>
                             <label class="text-xs font-medium text-muted-foreground block mb-1.5">Name *</label>
                             <input v-model="editForm.name" type="text"

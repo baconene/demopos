@@ -17,6 +17,7 @@ class InventoryPageController extends Controller
             ->map(fn ($i) => [
                 'id' => $i->id,
                 'name' => $i->name,
+                'item_type' => $i->item_type ?? 'ingredient',
                 'unit' => $i->unit,
                 'current_quantity' => (float) $i->current_quantity,
                 'min_quantity' => (float) $i->min_quantity,

@@ -26,6 +26,7 @@ class InventoryController extends Controller
 
         $data = $request->validate([
             'name'             => 'required|string|max:255',
+            'item_type'        => 'nullable|in:ingredient,tool,equipment,supply',
             'unit'             => 'required|string|max:50',
             'current_quantity' => 'required|numeric|min:0',
             'min_quantity'     => 'required|numeric|min:0',
@@ -35,6 +36,7 @@ class InventoryController extends Controller
 
         $ingredient = Ingredient::create([
             ...$data,
+            'item_type'       => $data['item_type'] ?? 'ingredient',
             'is_active'       => true,
             'track_inventory' => $data['track_inventory'] ?? true,
             'cost_per_unit'   => $data['cost_per_unit'] ?? 0,
@@ -50,12 +52,13 @@ class InventoryController extends Controller
         }
 
         $data = $request->validate([
-            'name'           => 'sometimes|string|max:255',
-            'unit'           => 'sometimes|string|max:50',
-            'min_quantity'   => 'sometimes|numeric|min:0',
-            'cost_per_unit'  => 'sometimes|numeric|min:0',
+            'name'            => 'sometimes|string|max:255',
+            'item_type'       => 'sometimes|in:ingredient,tool,equipment,supply',
+            'unit'            => 'sometimes|string|max:50',
+            'min_quantity'    => 'sometimes|numeric|min:0',
+            'cost_per_unit'   => 'sometimes|numeric|min:0',
             'track_inventory' => 'boolean',
-            'is_active'      => 'boolean',
+            'is_active'       => 'boolean',
         ]);
 
         $ingredient->update($data);

@@ -15,7 +15,7 @@ defineOptions({
 })
 
 interface Category   { id: number; name: string }
-interface Ingredient { id: number; name: string; unit: string; cost_per_unit: number }
+interface Ingredient { id: number; name: string; item_type: string; unit: string; cost_per_unit: number }
 interface RecipeRow  { ingredient_id: number; quantity: number; unit: string }
 interface Product {
     id: number; name: string; sku: string | null; description: string | null
@@ -112,6 +112,10 @@ const openEdit = (p: Product) => {
 // ─── Recipe row helpers ───────────────────────────────────────────────────────
 const addRecipeRow = () => recipes.value.push({ ingredient_id: 0, quantity: 1, unit: '' })
 const removeRecipeRow = (i: number) => recipes.value.splice(i, 1)
+const ingredientOptions = computed(() =>
+    props.ingredients.filter((x) => !x.item_type || x.item_type === 'ingredient')
+)
+
 const onIngredientChange = (i: number) => {
     const ing = props.ingredients.find((x) => x.id === recipes.value[i].ingredient_id)
     if (ing) recipes.value[i].unit = ing.unit
@@ -454,7 +458,7 @@ const doDelete = async () => {
                                     <select v-model="row.ingredient_id" @change="onIngredientChange(i)"
                                         class="flex-1 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
                                         <option :value="0" disabled>Select ingredient…</option>
-                                        <option v-for="ing in ingredients" :key="ing.id" :value="ing.id">{{ ing.name }} ({{ ing.unit }})</option>
+                                        <option v-for="ing in ingredientOptions" :key="ing.id" :value="ing.id">{{ ing.name }} ({{ ing.unit }})</option>
                                     </select>
                                     <input v-model.number="row.quantity" type="number" min="0.001" step="0.001" placeholder="Qty"
                                         class="w-24 rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
