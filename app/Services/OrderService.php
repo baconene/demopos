@@ -96,10 +96,20 @@ class OrderService
 
     public function updateOrderStatus(Order $order, OrderStatus $status): Order
     {
+        $previousStatus = $order->status;
+
         $order->update(['status' => $status->value]);
 
         if ($status === OrderStatus::COMPLETED) {
             $order->update(['completed_at' => now()]);
+
+            // Deduct inventory only once, on first completion
+            if ($previousStatus !== OrderStatus::COMPLETED->value) {
+                $order->load('items');
+                foreach ($order->items as $item) {
+                    $this->inventoryService->deductForOrder($item);
+                }
+            }
         }
 
         return $order;
