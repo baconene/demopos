@@ -118,6 +118,24 @@ const loadTenders = async () => {
     }
 }
 
+const queueOrderOffline = async (payload: Record<string, unknown>): Promise<boolean> => {
+    try {
+        const queued = await queueOrder(payload)
+        pendingOrder.value = {
+            id: 0,
+            total_amount: Number(cartStore.total),
+            _localId: queued.localId,
+            _offlineQueue: queued.offlineQueueNumber,
+        }
+        await refreshCount()
+        toast.warning(`Offline — order ${queued.offlineQueueNumber} queued for sync.`)
+        return true
+    } catch {
+        toast.error('Could not save order offline. Check browser storage permissions.')
+        return false
+    }
+}
+
 const submitOrder = async () => {
     if (cartStore.items.length === 0) return
     submitting.value = true
@@ -137,41 +155,34 @@ const submitOrder = async () => {
             })),
         }
 
-        try {
-            const res = await api.post('/api/v1/orders', payload)
-            const raw = res.data.data ?? res.data
-            pendingOrder.value = { ...raw, total_amount: parseFloat(raw.total_amount ?? 0) }
-        } catch (err: any) {
-            // Queue offline when: no network response OR browser reports offline
-            const isOffline = !navigator.onLine || !err.response
-            if (!isOffline) throw err
-
+        // If already offline before the call — skip network entirely
+        if (!navigator.onLine) {
+            const ok = await queueOrderOffline(payload as Record<string, unknown>)
+            if (!ok) return
+        } else {
             try {
-                const queued = await queueOrder(payload as Record<string, unknown>)
-                pendingOrder.value = {
-                    id: 0,
-                    total_amount: cartStore.total,
-                    _localId: queued.localId,
-                    _offlineQueue: queued.offlineQueueNumber,
+                const res = await api.post('/api/v1/orders', payload)
+                const raw = res.data.data ?? res.data
+                pendingOrder.value = { ...raw, total_amount: parseFloat(raw.total_amount ?? 0) }
+            } catch (err: any) {
+                // Connection dropped mid-request — no server response
+                if (!err.response) {
+                    const ok = await queueOrderOffline(payload as Record<string, unknown>)
+                    if (!ok) return
+                } else {
+                    // Server returned a real error (validation, auth, etc.)
+                    toast.error(err.response.data?.message ?? 'Failed to submit order')
+                    return
                 }
-                await refreshCount()
-                toast.warning(`Offline — order ${queued.offlineQueueNumber} queued for sync.`)
-            } catch {
-                toast.error('Could not save order offline. Check browser storage permissions.')
-                return
             }
         }
 
         cartOpen.value = false
         await loadTenders()
-        // If tenders couldn't load (offline, nothing cached), payment step is still usable
-        // with no tender selected — cashier can skip or select when back online
         selectedTenderId.value = tenders.value[0]?.id ?? null
-        amountTendered.value = pendingOrder.value!.total_amount.toFixed(2)
+        amountTendered.value = (pendingOrder.value?.total_amount ?? 0).toFixed(2)
         reference.value = ''
         paymentOpen.value = true
-    } catch (err: any) {
-        toast.error(err.response?.data?.message ?? 'Failed to submit order')
     } finally {
         submitting.value = false
     }
