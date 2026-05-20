@@ -9,6 +9,7 @@ use App\Http\Controllers\QueueMonitorController;
 use App\Http\Controllers\InventoryPageController;
 use App\Http\Controllers\ProductPageController;
 use App\Http\Controllers\ReportPageController;
+use App\Http\Controllers\OrderDetailPageController;
 
 Route::inertia('/', 'Welcome', [
     'canRegister' => Features::enabled(Features::registration()),
@@ -40,6 +41,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('products', [ProductPageController::class, 'index'])
         ->name('products.index')
         ->middleware('role:admin');
+
+    // Order detail
+    Route::get('orders/{order}', [OrderDetailPageController::class, 'show'])
+        ->name('orders.show')
+        ->middleware('can:view orders');
 
     // Reports
     Route::get('reports', [ReportPageController::class, 'index'])
