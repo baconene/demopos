@@ -332,7 +332,7 @@ const typeColor: Record<string, string> = {
                             <input v-model.number="newIngredient.cost_per_unit" type="number" min="0" step="0.01"
                                 placeholder="0.00"
                                 class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-                            <p class="text-xs text-muted-foreground mt-1">Used to calculate product cost and COGS for P&L reports.</p>
+                            <p class="text-xs text-muted-foreground mt-1">Used to calculate product cost and COGS for P&amp;L reports.</p>
                         </div>
                     </div>
                     <div class="p-5 border-t flex gap-3">
@@ -420,7 +420,6 @@ const typeColor: Record<string, string> = {
             </div>
         </Transition>
     </Teleport>
-</template>
 
     <!-- Edit Ingredient Modal -->
     <Teleport to="body">
@@ -459,7 +458,7 @@ const typeColor: Record<string, string> = {
                                 placeholder="0.00"
                                 class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                             <p class="text-xs text-muted-foreground mt-1">
-                                Cost per {{ editForm.unit || 'unit' }}. Used to calculate product COGS for P&L reports.
+                                Cost per {{ editForm.unit || 'unit' }}. Used to calculate product COGS for P&amp;L reports.
                             </p>
                         </div>
                     </div>
@@ -477,6 +476,7 @@ const typeColor: Record<string, string> = {
             </div>
         </Transition>
     </Teleport>
+</template>
 
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
