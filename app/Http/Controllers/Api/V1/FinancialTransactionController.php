@@ -10,7 +10,8 @@ class FinancialTransactionController extends Controller {
     public function index(Request $request): JsonResponse {
         $this->checkReports();
         $q = FinancialTransaction::with(['order', 'tender', 'user'])
-            ->orderByDesc('transacted_at');
+            ->orderByDesc('transacted_at')
+            ->orderByDesc('id');
         if ($request->type) $q->where('type', $request->type);
         if ($request->start_date) $q->whereDate('transacted_at', '>=', $request->start_date);
         if ($request->end_date)   $q->whereDate('transacted_at', '<=', $request->end_date);
@@ -64,13 +65,19 @@ class FinancialTransactionController extends Controller {
             'notes'         => 'nullable|string',
             'transacted_at' => 'nullable|date',
         ]);
+
+        $last = FinancialTransaction::orderByDesc('transacted_at')->orderByDesc('id')->first();
+        $prevBalance = $last ? (float) $last->running_balance : 0.0;
+        $signed = $data['type'] === 'expense' ? -(float) $data['amount'] : (float) $data['amount'];
+
         $tx = FinancialTransaction::create([
-            'type'          => $data['type'],
-            'amount'        => $data['amount'],
-            'description'   => $data['description'],
-            'notes'         => $data['notes'] ?? null,
-            'user_id'       => auth()->id(),
-            'transacted_at' => $data['transacted_at'] ?? now(),
+            'type'            => $data['type'],
+            'amount'          => $data['amount'],
+            'description'     => $data['description'],
+            'notes'           => $data['notes'] ?? null,
+            'user_id'         => auth()->id(),
+            'transacted_at'   => $data['transacted_at'] ?? now(),
+            'running_balance' => $prevBalance + $signed,
         ]);
         return response()->json($tx, 201);
     }

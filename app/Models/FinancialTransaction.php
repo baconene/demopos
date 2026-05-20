@@ -6,11 +6,12 @@ class FinancialTransaction extends Model {
     protected $fillable = [
         'type', 'amount', 'description',
         'order_id', 'payment_id', 'payment_tender_id',
-        'user_id', 'notes', 'transacted_at',
+        'user_id', 'notes', 'transacted_at', 'running_balance',
     ];
     protected $casts = [
-        'amount' => 'decimal:2',
-        'transacted_at' => 'datetime',
+        'amount'          => 'decimal:2',
+        'running_balance' => 'decimal:2',
+        'transacted_at'   => 'datetime',
     ];
 
     public function order() { return $this->belongsTo(Order::class); }

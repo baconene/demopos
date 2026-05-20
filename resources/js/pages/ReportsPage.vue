@@ -39,6 +39,7 @@ interface FtSummary {
 }
 interface FtTransaction {
     id: number; type: string; amount: number; description: string; transacted_at: string
+    running_balance: number
     user?: { name: string }; tender?: { name: string }
 }
 interface OrderRow {
@@ -130,6 +131,7 @@ const ftTypeFilter = ref('')
 const ftSummary = ref<FtSummary | null>(null)
 const ftTransactions = ref<FtTransaction[]>([])
 const ftMeta = ref<any>(null)
+const ftPage = ref(1)
 const showEntryForm = ref(false)
 const entryForm = ref({ type: 'expense' as 'expense' | 'income_adjustment', description: '', amount: '', notes: '', transacted_at: '' })
 const entrySaving = ref(false)
@@ -227,13 +229,15 @@ const loadInventory = async (page = 1) => {
     invMeta.value = res.data.meta ?? null
 }
 
-const loadFinancial = async () => {
+const loadFinancial = async (page = 1) => {
+    ftPage.value = page
     const [summaryRes, listRes] = await Promise.all([
         api.get('/api/v1/financial-transactions/summary', {
             params: { start_date: ftStartDate.value, end_date: ftEndDate.value },
         }),
         api.get('/api/v1/financial-transactions', {
             params: {
+                page,
                 start_date: ftStartDate.value,
                 end_date: ftEndDate.value,
                 type: ftTypeFilter.value || undefined,
@@ -792,25 +796,42 @@ onMounted(async () => {
                                 <th class="px-4 py-3 text-left">Description</th>
                                 <th class="px-4 py-3 text-left">Tender</th>
                                 <th class="px-4 py-3 text-right">Amount</th>
+                                <th class="px-4 py-3 text-right">Balance</th>
                                 <th class="px-4 py-3 text-left">By</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="tx in ftTransactions" :key="tx.id" class="hover:bg-muted/20">
-                                <td class="px-4 py-2 text-muted-foreground whitespace-nowrap">{{ tx.transacted_at?.slice(0, 10) }}</td>
+                                <td class="px-4 py-2 text-muted-foreground whitespace-nowrap">{{ fmtDatetime(tx.transacted_at) }}</td>
                                 <td class="px-4 py-2"><span :class="['rounded-full px-2 py-0.5 text-xs font-semibold', typeBadgeClass(tx.type)]">{{ typeLabel(tx.type) }}</span></td>
                                 <td class="px-4 py-2 max-w-xs truncate">{{ tx.description }}</td>
                                 <td class="px-4 py-2 text-muted-foreground">{{ tx.tender?.name ?? '—' }}</td>
                                 <td class="px-4 py-2 text-right font-bold" :class="isCredit(tx.type) ? 'text-green-600' : 'text-red-600'">
                                     {{ isCredit(tx.type) ? '+' : '-' }}{{ fmt(tx.amount) }}
                                 </td>
+                                <td class="px-4 py-2 text-right font-semibold" :class="tx.running_balance >= 0 ? 'text-foreground' : 'text-red-600'">
+                                    {{ fmt(tx.running_balance) }}
+                                </td>
                                 <td class="px-4 py-2 text-muted-foreground text-xs">{{ tx.user?.name ?? '—' }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <div v-if="ftMeta" class="px-4 py-3 border-t text-xs text-muted-foreground">
-                    Showing {{ ftTransactions.length }} of {{ ftMeta.total }} transactions
+                <div v-if="ftMeta" class="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
+                    <span>Page {{ ftMeta.current_page }} of {{ ftMeta.last_page }} &mdash; {{ ftMeta.total }} transactions</span>
+                    <div class="flex items-center gap-1">
+                        <button
+                            @click="loadFinancial(ftPage - 1)"
+                            :disabled="ftPage <= 1"
+                            class="rounded px-2 py-1 border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                        ><ChevronLeft class="h-3 w-3" /></button>
+                        <span class="px-2">{{ ftPage }}</span>
+                        <button
+                            @click="loadFinancial(ftPage + 1)"
+                            :disabled="ftPage >= ftMeta.last_page"
+                            class="rounded px-2 py-1 border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                        ><ChevronRight class="h-3 w-3" /></button>
+                    </div>
                 </div>
             </div>
             <div v-else-if="!loading" class="rounded-xl border bg-card p-10 text-center shadow-sm text-muted-foreground text-sm">
