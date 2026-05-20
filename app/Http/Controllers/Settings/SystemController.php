@@ -12,6 +12,7 @@ use Inertia\Response;
 
 class SystemController extends Controller
 {
+    /** Transactional records — cleared by both reset types */
     private const TRANSACTIONAL_TABLES = [
         'audit_logs',
         'order_item_modifiers',
@@ -25,6 +26,19 @@ class SystemController extends Controller
         'payroll_records',
         'purchase_order_items',
         'purchase_orders',
+    ];
+
+    /** Menu/setup data — only cleared by factory reset */
+    private const SETUP_TABLES = [
+        'recipes',
+        'product_modifier',
+        'modifiers',
+        'products',
+        'categories',
+        'ingredients',
+        'employees',
+        'suppliers',
+        'payment_tenders',
     ];
 
     public function index(): Response
@@ -44,24 +58,42 @@ class SystemController extends Controller
         ]);
 
         DB::transaction(function () {
-            // Disable FK constraints for the duration of the wipe
-            try { DB::statement('PRAGMA foreign_keys=OFF'); } catch (\Throwable) {}
-
-            foreach (self::TRANSACTIONAL_TABLES as $table) {
-                DB::table($table)->delete();
-                // Reset SQLite auto-increment (no-op on MySQL/Postgres)
-                try {
-                    DB::statement("DELETE FROM sqlite_sequence WHERE name='{$table}'");
-                } catch (\Throwable) {}
-            }
-
-            // Re-enable FK constraints
-            try { DB::statement('PRAGMA foreign_keys=ON'); } catch (\Throwable) {}
-
-            // Zero out all inventory quantities since the transaction log is gone
+            $this->wipeTables(self::TRANSACTIONAL_TABLES);
             Ingredient::query()->update(['current_quantity' => 0]);
         });
 
         return back()->with('success', 'System has been reset. All transaction history cleared and inventory zeroed.');
+    }
+
+    public function factoryReset(Request $request): RedirectResponse
+    {
+        abort_unless(auth()->user()?->hasRole('admin'), 403);
+
+        $request->validate([
+            'confirmation' => ['required', 'in:FACTORY RESET'],
+        ], [
+            'confirmation.in' => 'Type FACTORY RESET exactly to confirm.',
+        ]);
+
+        DB::transaction(function () {
+            $this->wipeTables(self::TRANSACTIONAL_TABLES);
+            $this->wipeTables(self::SETUP_TABLES);
+        });
+
+        return back()->with('success', 'Factory reset complete. The system is now clean and ready for a fresh setup.');
+    }
+
+    private function wipeTables(array $tables): void
+    {
+        try { DB::statement('PRAGMA foreign_keys=OFF'); } catch (\Throwable) {}
+
+        foreach ($tables as $table) {
+            DB::table($table)->delete();
+            try {
+                DB::statement("DELETE FROM sqlite_sequence WHERE name='{$table}'");
+            } catch (\Throwable) {}
+        }
+
+        try { DB::statement('PRAGMA foreign_keys=ON'); } catch (\Throwable) {}
     }
 }

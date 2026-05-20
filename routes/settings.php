@@ -43,6 +43,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('settings/system/reset', [SystemController::class, 'reset'])
         ->name('settings.system.reset')
         ->middleware('role:admin');
+    Route::post('settings/system/factory-reset', [SystemController::class, 'factoryReset'])
+        ->name('settings.system.factory-reset')
+        ->middleware('role:admin');
     Route::post('settings/logo', [LogoController::class, 'update'])
         ->name('settings.logo.update')
         ->middleware('role:admin');
