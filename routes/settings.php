@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\UserManagementController;
 use App\Http\Controllers\Settings\LogoController;
+use App\Http\Controllers\Settings\SystemController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
@@ -33,6 +34,14 @@ Route::middleware(['auth'])->group(function () {
     // Logo (admin only)
     Route::get('settings/logo', [LogoController::class, 'edit'])
         ->name('settings.logo')
+        ->middleware('role:admin');
+
+    // System (admin only)
+    Route::get('settings/system', [SystemController::class, 'index'])
+        ->name('settings.system')
+        ->middleware('role:admin');
+    Route::post('settings/system/reset', [SystemController::class, 'reset'])
+        ->name('settings.system.reset')
         ->middleware('role:admin');
     Route::post('settings/logo', [LogoController::class, 'update'])
         ->name('settings.logo.update')

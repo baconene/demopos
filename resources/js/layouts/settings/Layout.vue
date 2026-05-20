@@ -27,6 +27,7 @@ const sidebarNavItems = computed<NavItem[]>(() => {
         items.push({ title: 'Payment Tenders', href: '/settings/payment-tenders' });
         items.push({ title: 'Users', href: '/settings/users' });
         items.push({ title: 'Logo', href: '/settings/logo' });
+        items.push({ title: 'System', href: '/settings/system' });
     }
     return items;
 });
