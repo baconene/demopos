@@ -59,25 +59,50 @@ class InventoryService
         ?string $reference = null,
         ?string $notes = null,
     ): InventoryTransaction {
-        $oldQuantity = $ingredient->current_quantity;
+        $oldQuantity = (float) $ingredient->current_quantity;
 
         match ($type) {
-            InventoryTransactionType::STOCK_IN => $ingredient->increment('current_quantity', $quantity),
-            InventoryTransactionType::STOCK_OUT => $ingredient->decrement('current_quantity', $quantity),
+            InventoryTransactionType::STOCK_IN   => $ingredient->increment('current_quantity', $quantity),
+            InventoryTransactionType::STOCK_OUT  => $ingredient->decrement('current_quantity', $quantity),
             InventoryTransactionType::ADJUSTMENT => $ingredient->update(['current_quantity' => $quantity]),
-            InventoryTransactionType::WASTE => $ingredient->decrement('current_quantity', $quantity),
+            InventoryTransactionType::WASTE      => $ingredient->decrement('current_quantity', $quantity),
         };
 
-        return InventoryTransaction::create([
+        $ingredient->refresh();
+        $newQuantity = (float) $ingredient->current_quantity;
+
+        $tx = InventoryTransaction::create([
             'ingredient_id' => $ingredient->id,
-            'user_id' => Auth::id(),
-            'type' => $type,
-            'quantity' => $quantity,
-            'old_quantity' => $oldQuantity,
-            'new_quantity' => $ingredient->fresh()->current_quantity,
-            'reference' => $reference,
-            'notes' => $notes,
+            'user_id'       => Auth::id(),
+            'type'          => $type,
+            'quantity'      => $quantity,
+            'old_quantity'  => $oldQuantity,
+            'new_quantity'  => $newQuantity,
+            'reference'     => $reference,
+            'notes'         => $notes,
         ]);
+
+        // Record a financial expense for stock purchases and positive adjustments
+        $costPerUnit = (float) $ingredient->cost_per_unit;
+        if ($costPerUnit > 0) {
+            $costDelta = match ($type) {
+                InventoryTransactionType::STOCK_IN   => $quantity * $costPerUnit,
+                InventoryTransactionType::ADJUSTMENT => max(0.0, ($newQuantity - $oldQuantity)) * $costPerUnit,
+                default                              => 0.0,
+            };
+
+            if ($costDelta > 0) {
+                \App\Models\FinancialTransaction::create([
+                    'type'          => 'expense',
+                    'amount'        => round($costDelta, 2),
+                    'description'   => "Inventory {$type->label()}: {$ingredient->name}",
+                    'user_id'       => Auth::id(),
+                    'transacted_at' => now(),
+                ]);
+            }
+        }
+
+        return $tx;
     }
 
     /**

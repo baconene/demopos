@@ -42,6 +42,18 @@ class InventoryController extends Controller
             'cost_per_unit'   => $data['cost_per_unit'] ?? 0,
         ]);
 
+        // Record the cost of initial stock as an expense
+        $initialCost = (float) $ingredient->current_quantity * (float) $ingredient->cost_per_unit;
+        if ($initialCost > 0) {
+            \App\Models\FinancialTransaction::create([
+                'type'          => 'expense',
+                'amount'        => round($initialCost, 2),
+                'description'   => "Initial stock: {$ingredient->name}",
+                'user_id'       => auth()->id(),
+                'transacted_at' => now(),
+            ]);
+        }
+
         return response()->json(new InventoryResource($ingredient), 201);
     }
 
