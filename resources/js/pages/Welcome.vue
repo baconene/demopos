@@ -140,111 +140,216 @@ withDefaults(defineProps<{ canRegister?: boolean }>(), { canRegister: false })
                         <span class="rounded-full bg-blue-950 border border-blue-800 px-4 py-1.5 text-sm text-blue-300">📦 Inventory</span>
                         <span class="rounded-full bg-blue-950 border border-blue-800 px-4 py-1.5 text-sm text-blue-300">👥 Staff Mgmt</span>
                     </div>
-                    <Link :href="dashboard()" v-if="$page.props.auth?.user"
-                        class="text-blue-400 font-bold hover:text-blue-300 transition-colors">
+                                      <Link
+                        v-if="$page.props.auth?.user"
+                        :href="dashboard()"
+                        class="text-blue-400 font-bold hover:text-blue-300 transition-colors"
+                    >
                         Go to Dashboard →
-                FEATURES GRID ────────────────────────────────── -->
+                    </Link>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── FEATURES GRID ────────────────────────────────── -->
         <section class="py-24 px-6 bg-gradient-to-b from-transparent to-slate-900/50">
             <div class="max-w-5xl mx-auto">
                 <div class="text-center mb-14">
-                    <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">Powerful Capabilities</p>
-                    <h2 class="text-4xl font-black">Packed with Features</h2>
+                    <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">
+                        Powerful Capabilities
+                    </p>
+
+                    <h2 class="text-4xl font-black">
+                        Packed with Features
+                    </h2>
                 </div>
 
                 <div class="grid sm:grid-cols-2 gap-6">
-                    <div v-for="item in [
-                        { icon: '💳', name: 'Multi-Payment Methods', desc: 'Accept cash, cards, mobile payments, and online transfers all in one place.', tag: 'Popular' },
-                        { icon: '📊', name: 'Advanced Analytics', desc: 'Real-time sales dashboards with detailed reports and business insights.', tag: null },
-                        { icon: '📦', name: 'Smart Inventory', desc: 'Track stock levels, auto-reorder alerts, and multi-location management.', tag: null },
-                        { icon: '👥', name: 'Staff Management', desc: 'Employee profiles, shift scheduling, sales tracking, and performance metrics.', tag: null },
-                    ]" :key="item.name"
+                    <div
+                        v-for="item in [
+                            {
+                                icon: '💳',
+                                name: 'Multi-Payment Methods',
+                                desc: 'Accept cash, cards, mobile payments, and online transfers all in one place.',
+                                tag: 'Popular'
+                            },
+                            {
+                                icon: '📊',
+                                name: 'Advanced Analytics',
+                                desc: 'Real-time sales dashboards with detailed reports and business insights.',
+                                tag: null
+                            },
+                            {
+                                icon: '📦',
+                                name: 'Smart Inventory',
+                                desc: 'Track stock levels, auto-reorder alerts, and multi-location management.',
+                                tag: null
+                            },
+                            {
+                                icon: '👥',
+                                name: 'Staff Management',
+                                desc: 'Employee profiles, shift scheduling, sales tracking, and performance metrics.',
+                                tag: null
+                            },
+                        ]"
+                        :key="item.name"
                         class="group relative flex gap-5 items-start rounded-2xl border border-white/5 bg-white/3 p-5 hover:border-blue-700/60 hover:bg-blue-950/30 transition-all duration-300"
-                        style="background: rgba(255,255,255,0.02)">
-                        <div v-if="item.tag" class="absolute top-3 right-3 bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    >
+                        <div
+                            v-if="item.tag"
+                            class="absolute top-3 right-3 bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase"
+                        >
                             {{ item.tag }}
                         </div>
-                        <div class="shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-blue-900 to-blue-950 border border-blue-800/40 flex items-center justify-center text-3xl shadow-inner">
+
+                        <div
+                            class="shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-blue-900 to-blue-950 border border-blue-800/40 flex items-center justify-center text-3xl shadow-inner"
+                        >
                             {{ item.icon }}
                         </div>
+
                         <div class="flex-1 min-w-0">
-                            <div class="flex items-baseline justify-between gap-2 mb-1">
-                                <h3 class="font-bold text-white text-sm leading-tight">{{ item.name }}</h3>
-                            </div>
-                            <p class="text-xs text-gray-400 leading-relaxed">{{ item.desc }}</p>
+                            <h3 class="font-bold text-white text-sm leading-tight mb-2">
+                                {{ item.name }}
+                            </h3>
+
+                            <p class="text-xs text-gray-400 leading-relaxed">
+                                {{ item.desc }}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <p class="text-center text-xs text-gray-500 mt-6">Everything you need to run your business efficiently
-                        </div>
-                    </div>
-                </div>
+                <p class="text-center text-xs text-gray-500 mt-6">
+                    Everything you need to run your business efficiently
+                </p>
+            </div>
+        </section>
 
-                WHY DEMOPOS ────────────────────────────────── -->
+        <!-- ── WHY DEMOPOS ────────────────────────────────── -->
         <section class="py-24 px-6 border-t border-blue-900/30">
             <div class="max-w-5xl mx-auto text-center mb-16">
-                <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">Why Choose DemoPOS</p>
+                <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">
+                    Why Choose DemoPOS
+                </p>
+
                 <h2 class="text-4xl sm:text-5xl font-black mb-6 leading-tight">
-                    Built For<br>
+                    Built For<br />
                     <span class="text-blue-300">Modern Retailers</span>
                 </h2>
+
                 <p class="max-w-2xl mx-auto text-gray-300 leading-relaxed text-lg">
-                    DemoPOS is a <strong class="text-white">comprehensive point-of-sale solution</strong> designed for
-                    <strong class="text-white">retail stores, restaurants, and small businesses</strong>.
-                    We provide <strong class="text-blue-400">powerful tools, easy operations</strong>, and exceptional support.
+                    DemoPOS is a
+                    <strong class="text-white">comprehensive point-of-sale solution</strong>
+                    designed for
+                    <strong class="text-white">
+                        retail stores, restaurants, and small businesses
+                    </strong>.
+                    We provide
+                    <strong class="text-blue-400">
+                        powerful tools, easy operations
+                    </strong>,
+                    and exceptional support.
                 </p>
             </div>
 
             <div class="max-w-5xl mx-auto grid sm:grid-cols-3 gap-6">
-                <div v-for="card in [
-                    { icon: '⚡', title: 'Fast Setup', body: 'Get your POS system up and running in minutes. No complicated configuration required.' },
-                    { icon: '🔐', title: 'Secure & Reliable', body: 'Enterprise-grade security with data encryption, backups, and 99.9% uptime guarantee.' },
-                    { icon: '📞', title: '24/7 Support', body: 'Dedicated support team ready to help you 24/7. Priority assistance for all clients.' },
-                ]" :key="card.title"
-                    class="rounded-2xl border border-white/5 p-6 text-center hover:border-blualong a bypass road — easy to spot, easy to stop at, impossible to miss.' },
-                    { icon: '🔥', title: 'Live Fire Grilling', body: 'We grill fresh in front of you. No reheated food. Every plate leaves the grill hot and smoky.' },
-                    { icon: '⚡', title: 'Fast & Affordable', body: 'Combo meals starting at ₱99. Grab-and-go friendly. Perfect for commuters and families on the move.' },
-                ]" :key="card.title"
-                    class="rounded-2xl border border-white/5 p-6 text-center hover:border-orange-700/50 transition-colors"
-                    style="background: rgba(255,255,255,0.025)">
-                    <div class="text-5xl mb-5">{{ card.icon }}</div>
-                    <h3 class="font-bold text-white mb-3">{{ card.title }}</h3>
-                    <p class="text-sm text-gray-400 leading-relaxed">{{ card.body }}</p>
-                CTA BANNER ──────────────────────────────── -->
+                <div
+                    v-for="card in [
+                        {
+                            icon: '⚡',
+                            title: 'Fast Setup',
+                            body: 'Get your POS system up and running in minutes. No complicated configuration required.'
+                        },
+                        {
+                            icon: '🔐',
+                            title: 'Secure & Reliable',
+                            body: 'Enterprise-grade security with data encryption, backups, and 99.9% uptime guarantee.'
+                        },
+                        {
+                            icon: '📞',
+                            title: '24/7 Support',
+                            body: 'Dedicated support team ready to help you 24/7. Priority assistance for all clients.'
+                        },
+                    ]"
+                    :key="card.title"
+                    class="rounded-2xl border border-white/5 p-6 text-center hover:border-blue-700/50 transition-colors"
+                    style="background: rgba(255,255,255,0.025)"
+                >
+                    <div class="text-5xl mb-5">
+                        {{ card.icon }}
+                    </div>
+
+                    <h3 class="font-bold text-white mb-3">
+                        {{ card.title }}
+                    </h3>
+
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        {{ card.body }}
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── CTA BANNER ──────────────────────────────── -->
         <section class="py-20 px-6 text-center relative overflow-hidden">
-            <div class="absolute inset-0 pointer-events-none"
-                style="background: linear-gradient(180deg, transparent, rgba(59,130,246,0.08), transparent);"></div>
+            <div
+                class="absolute inset-0 pointer-events-none"
+                style="background: linear-gradient(180deg, transparent, rgba(59,130,246,0.08), transparent);"
+            ></div>
+
             <div class="relative z-10 max-w-3xl mx-auto">
                 <p class="text-3xl sm:text-4xl font-black leading-tight text-white mb-6">
-                    Ready to transform your retail business?<br>
-                    <span class="text-blue-400">Start your free trial today.</span>
+                    Ready to transform your retail business?<br />
+                    <span class="text-blue-400">
+                        Start your free trial today.
+                    </span>
                 </p>
-                <Link :href="login()"
-                    class="inline-block bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-500 transition-colors">
+
+                <Link
+                    :href="login()"
+                    class="inline-block bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-500 transition-colors"
+                >
                     Get Started for Free
                 </Link>
-                <p class="text-gray-400 text-sm uppercase tracking-widest mt-6">DemoPOS · Modern Point of Sale System
-                <p class="text-3xl sm:text-4xl font-black leading-tight text-white mb-4">
-                    "Kain agad—<span class="text-orange-400">mas solid habang mainit!</span>"
+
+                <p class="text-gray-400 text-sm uppercase tracking-widest mt-6">
+                    DemoPOS · Modern Point of Sale System
                 </p>
-                <p class="text-gray-400 text-sm uppercase tracking-widest">Bypass Grill · Fresh Off The Grill Daily</p>
             </div>
         </section>
 
         <!-- ── FOOTER ─────────────────────────────────────── -->
-        <footer class="border-t border-orange-900/30 px-6 py-8 text-center">
+        <footer class="border-t border-blue-900/30 px-6 py-8 text-center">
             <div class="flex items-center justify-center gap-3 mb-3">
-                <div class="h-8 w-8 rounded-full border-2 border-orange-600 flex items-center justify-center">
-                    <span class="text-[8px] font-black text-orange-500 leading-tight text-center">BY<br>PASS</span>
+                <div
+                    class="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center"
+                >
+                    <svg
+                        class="w-4 h-4 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                    >
+                        <path
+                            d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 6H6.28l-.31-1.243A1 1 0 005 4H3z"
+                        />
+                    </svg>
                 </div>
-                <span class="font-black tracking-widest text-white">BYPASS <span class="text-orange-500">GRILL</span></span>
-            </div>
-            <p class="text-xs text-gray-600">Pop-up grill stores along bypass roads near you.</p>
-        </footer>
 
+                <span class="font-black tracking-widest text-white">
+                    Demo<span class="text-blue-400">POS</span>
+                </span>
+            </div>
+
+            <p class="text-xs text-gray-600">
+                © 2026 DemoPOS. All rights reserved.
+            </p>
+        </footer>
     </div>
 </template>
 
 <style scoped>
-.bg-white\/3 { background-color: rgba(255,255,255,0.03); }
+.bg-white\/3 {
+    background-color: rgba(255, 255, 255, 0.03);
+}
 </style>
