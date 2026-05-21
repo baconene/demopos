@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import api from '@/utils/api'
 import {
     BarChart3, DollarSign, Plus, Trash2, ChevronLeft, ChevronRight,
-    TrendingUp, TrendingDown, ChevronDown, Search,
+    TrendingUp, TrendingDown, ChevronDown, Search, Pencil, X,
 } from 'lucide-vue-next'
 
 defineOptions({
@@ -33,9 +33,9 @@ interface PaymentTender {
     id: number; name: string; is_active: boolean
 }
 interface FtTransaction {
-    id: number; type: string; amount: number; description: string; transacted_at: string
-    running_balance: number
-    user?: { name: string }; tender?: { name: string }
+    id: number; type: string; amount: number; description: string; notes: string | null
+    transacted_at: string; running_balance: number; payment_tender_id: number | null
+    user?: { name: string }; tender?: { id: number; name: string }
 }
 interface BillsSummary {
     total_due: number; overdue: number; upcoming: number; count: number
@@ -63,6 +63,9 @@ const ftSearch = ref('')
 const ftSortKey = ref<'transacted_at' | 'type' | 'amount' | 'description'>('transacted_at')
 const ftSortDir = ref<'asc' | 'desc'>('desc')
 const tenders = ref<PaymentTender[]>([])
+const editingTx = ref<FtTransaction | null>(null)
+const editForm = ref({ description: '', amount: '', notes: '', transacted_at: '', payment_tender_id: null as number | null })
+const editSaving = ref(false)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (v: number | string | null | undefined) =>
@@ -185,8 +188,8 @@ const toggleSort = (key: typeof ftSortKey.value) => {
 // ── Data loading ───────────────────────────────────────────────────────────────
 const loadTenders = async () => {
     try {
-        const res = await api.get('/api/v1/payment-tenders/all')
-        tenders.value = (res.data?.data ?? res.data ?? []).filter((t: PaymentTender) => t.is_active)
+        const res = await api.get('/api/v1/payment-tenders')
+        tenders.value = Array.isArray(res.data) ? res.data : (res.data?.data ?? [])
     } catch { /* non-fatal */ }
 }
 
@@ -240,6 +243,42 @@ const saveEntry = async () => {
         toast.error(err.response?.data?.message ?? 'Failed to save entry.')
     } finally {
         entrySaving.value = false
+    }
+}
+
+const startEdit = (tx: FtTransaction) => {
+    editingTx.value = tx
+    // Format datetime-local value: strip seconds/ms from ISO string
+    const dt = tx.transacted_at ? tx.transacted_at.replace(' ', 'T').substring(0, 16) : ''
+    editForm.value = {
+        description: tx.description,
+        amount: String(tx.amount),
+        notes: tx.notes ?? '',
+        transacted_at: dt,
+        payment_tender_id: tx.payment_tender_id ?? null,
+    }
+}
+
+const cancelEdit = () => { editingTx.value = null }
+
+const saveEdit = async () => {
+    if (!editingTx.value) return
+    editSaving.value = true
+    try {
+        await api.patch(`/api/v1/financial-transactions/${editingTx.value.id}`, {
+            description: editForm.value.description || undefined,
+            amount: editForm.value.amount ? parseFloat(editForm.value.amount) : undefined,
+            notes: editForm.value.notes || null,
+            transacted_at: editForm.value.transacted_at || undefined,
+            payment_tender_id: editForm.value.payment_tender_id || null,
+        })
+        toast.success('Transaction updated.')
+        editingTx.value = null
+        await loadFinancial(ftPage.value)
+    } catch (err: any) {
+        toast.error(err.response?.data?.message ?? 'Failed to update transaction.')
+    } finally {
+        editSaving.value = false
     }
 }
 
@@ -564,6 +603,57 @@ onMounted(async () => {
             </div>
         </div>
 
+        <!-- ── Edit Entry form ──────────────────────────────────────────────────── -->
+        <div v-if="editingTx" class="rounded-xl border border-primary/30 bg-card shadow-sm p-4">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-sm font-bold flex items-center gap-2">
+                    <Pencil class="h-4 w-4 text-primary" />
+                    Edit {{ editingTx.type === 'income_adjustment' ? 'Income Adjustment' : 'Expense' }}
+                    <span class="text-xs text-muted-foreground font-normal">#{{ editingTx.id }}</span>
+                </p>
+                <button @click="cancelEdit" class="text-muted-foreground hover:text-foreground">
+                    <X class="h-4 w-4" />
+                </button>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">Amount (₱) *</label>
+                    <input v-model="editForm.amount" type="number" min="0.01" step="0.01"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">Tender / Account</label>
+                    <select v-model="editForm.payment_tender_id"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option :value="null">— Not tagged —</option>
+                        <option v-for="t in tenders" :key="t.id" :value="t.id">{{ t.name }}</option>
+                    </select>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">Description *</label>
+                    <input v-model="editForm.description" type="text"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">Date/Time</label>
+                    <input v-model="editForm.transacted_at" type="datetime-local"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">Notes</label>
+                    <input v-model="editForm.notes" type="text" placeholder="Optional reference"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+            </div>
+            <div class="flex gap-2 mt-3">
+                <button @click="saveEdit" :disabled="editSaving || !editForm.description.trim() || !editForm.amount"
+                    class="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                    {{ editSaving ? 'Saving…' : 'Save Changes' }}
+                </button>
+                <button @click="cancelEdit" class="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted">Cancel</button>
+            </div>
+        </div>
+
         <!-- ── Transactions table ─────────────────────────────────────────────── -->
         <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div class="p-4 border-b flex items-center justify-between">
@@ -592,7 +682,7 @@ onMounted(async () => {
                                     <span v-else class="opacity-30">↕</span>
                                 </span>
                             </th>
-                            <th class="px-4 py-3 text-left">Reference</th>
+                            <th class="px-4 py-3 text-left">Tender</th>
                             <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-foreground whitespace-nowrap" @click="toggleSort('amount')">
                                 <span class="flex items-center justify-end gap-1">Amount
                                     <span v-if="ftSortKey === 'amount'" class="text-primary">{{ ftSortDir === 'asc' ? '↑' : '↓' }}</span>
@@ -605,7 +695,8 @@ onMounted(async () => {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="tx in sortedTx" :key="tx.id" class="border-t hover:bg-muted/20 transition-colors">
+                        <tr v-for="tx in sortedTx" :key="tx.id"
+                            :class="['border-t transition-colors', editingTx?.id === tx.id ? 'bg-primary/5 dark:bg-primary/10' : 'hover:bg-muted/20']">
                             <td class="px-4 py-3 text-sm tabular-nums whitespace-nowrap">{{ fmtDatetime(tx.transacted_at) }}</td>
                             <td class="px-4 py-3">
                                 <span :class="['px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap', typeBadgeClass(tx.type)]">
@@ -620,10 +711,19 @@ onMounted(async () => {
                             <td class="px-4 py-3 text-right text-sm tabular-nums">{{ fmt(tx.running_balance) }}</td>
                             <td class="px-4 py-3 text-sm text-muted-foreground">{{ tx.user?.name ?? '—' }}</td>
                             <td class="px-4 py-3 text-center">
-                                <button @click="deleteTransaction(tx)" :disabled="ftDeleting === tx.id"
-                                    class="text-red-600 hover:text-red-700 disabled:opacity-50">
-                                    <Trash2 class="h-4 w-4" />
-                                </button>
+                                <div class="flex items-center justify-center gap-1">
+                                    <button v-if="['expense','income_adjustment'].includes(tx.type)"
+                                        @click="startEdit(tx)"
+                                        :class="['hover:text-primary transition-colors', editingTx?.id === tx.id ? 'text-primary' : 'text-muted-foreground']"
+                                        title="Edit">
+                                        <Pencil class="h-4 w-4" />
+                                    </button>
+                                    <button @click="deleteTransaction(tx)" :disabled="ftDeleting === tx.id"
+                                        class="text-red-600 hover:text-red-700 disabled:opacity-50 transition-colors"
+                                        title="Delete">
+                                        <Trash2 class="h-4 w-4" />
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>

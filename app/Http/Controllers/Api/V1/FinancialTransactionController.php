@@ -103,6 +103,56 @@ class FinancialTransactionController extends Controller {
         return response()->json($tx, 201);
     }
 
+    public function update(Request $request, FinancialTransaction $financialTransaction): JsonResponse {
+        if (! auth()->user()?->hasAnyRole('admin', 'auditor')) abort(403);
+
+        if (! in_array($financialTransaction->type, ['expense', 'income_adjustment'])) {
+            abort(422, 'Only manually created entries can be edited.');
+        }
+
+        $data = $request->validate([
+            'amount'            => 'sometimes|numeric|min:0.01',
+            'description'       => 'sometimes|string|max:255',
+            'notes'             => 'nullable|string',
+            'transacted_at'     => 'sometimes|date',
+            'payment_tender_id' => 'nullable|exists:payment_tenders,id',
+        ]);
+
+        $oldAmount = (float) $financialTransaction->amount;
+        $oldAt     = $financialTransaction->transacted_at->copy();
+
+        $financialTransaction->fill($data)->saveQuietly();
+        $financialTransaction->refresh();
+
+        $newAmount = (float) $financialTransaction->amount;
+        $newAt     = $financialTransaction->transacted_at;
+
+        if (abs($newAmount - $oldAmount) > 0.001 || ! $oldAt->eq($newAt)) {
+            // Recalculate running_balance from the earliest affected date forward
+            $recalcFrom = $oldAt->lt($newAt) ? $oldAt : $newAt;
+
+            $base = (float) (FinancialTransaction::where('transacted_at', '<', $recalcFrom)
+                ->orderByDesc('transacted_at')->orderByDesc('id')
+                ->value('running_balance') ?? 0.0);
+
+            FinancialTransaction::where('transacted_at', '>=', $recalcFrom)
+                ->orderBy('transacted_at')->orderBy('id')
+                ->each(function (FinancialTransaction $tx) use (&$base) {
+                    $base = round($base + match ($tx->type) {
+                        'payment', 'income_adjustment' => (float) $tx->amount,
+                        'expense', 'order', 'payroll'  => -(float) $tx->amount,
+                        default                        => 0.0,
+                    }, 2);
+                    if ((float) $tx->running_balance !== $base) {
+                        $tx->running_balance = $base;
+                        $tx->saveQuietly();
+                    }
+                });
+        }
+
+        return response()->json($financialTransaction->fresh()->load(['tender', 'user']));
+    }
+
     public function destroy(FinancialTransaction $financialTransaction): JsonResponse {
         if (! auth()->user()?->hasAnyRole('admin', 'auditor')) abort(403);
 
