@@ -9,27 +9,48 @@ use Illuminate\Http\Request;
 class FinancialTransactionController extends Controller {
     public function index(Request $request): JsonResponse {
         $this->checkReports();
+
+        // Order debits are excluded from financial view — they're captured via payment credits
         $q = FinancialTransaction::with(['order', 'tender', 'user'])
+            ->where('type', '!=', 'order')
             ->orderByDesc('transacted_at')
             ->orderByDesc('id');
+
         if ($request->type) $q->where('type', $request->type);
         if ($request->start_date) $q->whereDate('transacted_at', '>=', $request->start_date);
         if ($request->end_date)   $q->whereDate('transacted_at', '<=', $request->end_date);
+
+        if (! $request->boolean('include_cogs', true)) {
+            $q->where(fn ($inner) =>
+                $inner->where('type', '!=', 'expense')
+                      ->orWhere(fn ($q2) => $q2->where('type', 'expense')->where('description', 'not like', 'COGS:%'))
+            );
+        }
+
         return response()->json($q->paginate(50));
     }
 
     public function summary(Request $request): JsonResponse {
         $this->checkReports();
-        $start = $request->start_date ? Carbon::parse($request->start_date)->startOfDay() : Carbon::today()->startOfDay();
-        $end   = $request->end_date   ? Carbon::parse($request->end_date)->endOfDay()     : Carbon::today()->endOfDay();
+        $start       = $request->start_date ? Carbon::parse($request->start_date)->startOfDay() : Carbon::today()->startOfDay();
+        $end         = $request->end_date   ? Carbon::parse($request->end_date)->endOfDay()     : Carbon::today()->endOfDay();
+        $includeCogs = $request->boolean('include_cogs', true);
+
+        // Reusable scope to strip COGS expense rows when the toggle is off
+        $noCogs = fn ($q) => $q->where(fn ($inner) =>
+            $inner->where('type', '!=', 'expense')
+                  ->orWhere(fn ($q2) => $q2->where('type', 'expense')->where('description', 'not like', 'COGS:%'))
+        );
 
         $rows = FinancialTransaction::selectRaw('type, SUM(amount) as total, COUNT(*) as count')
             ->whereBetween('transacted_at', [$start, $end])
+            ->where('type', '!=', 'order')
+            ->when(! $includeCogs, $noCogs)
             ->groupBy('type')
             ->get()
             ->keyBy('type');
 
-        // Payments by tender (credits only — for the tender summary cards)
+        // Payments by tender (payment credits only)
         $byTender = FinancialTransaction::where('type', 'payment')
             ->whereBetween('transacted_at', [$start, $end])
             ->with('tender')
@@ -42,13 +63,15 @@ class FinancialTransactionController extends Controller {
                 'count'  => $r->count,
             ]);
 
-        // Net balance per tender — all tagged types (in: payment + income_adj, out: expense + payroll + order)
+        // Net per tender — excluding raw order debits; respects COGS toggle
         $netByTender = FinancialTransaction::whereBetween('transacted_at', [$start, $end])
             ->whereNotNull('payment_tender_id')
+            ->where('type', '!=', 'order')
+            ->when(! $includeCogs, $noCogs)
             ->with('tender')
             ->selectRaw("payment_tender_id,
                 SUM(CASE WHEN type IN ('payment','income_adjustment') THEN amount ELSE 0 END) as total_in,
-                SUM(CASE WHEN type IN ('expense','payroll','order')   THEN amount ELSE 0 END) as total_out,
+                SUM(CASE WHEN type IN ('expense','payroll')           THEN amount ELSE 0 END) as total_out,
                 COUNT(*) as cnt")
             ->groupBy('payment_tender_id')
             ->get()
@@ -68,7 +91,6 @@ class FinancialTransactionController extends Controller {
 
         return response()->json([
             'period'             => ['start' => $start->toDateString(), 'end' => $end->toDateString()],
-            'orders'             => ['total' => (float)($rows['order']?->total   ?? 0), 'count' => $rows['order']?->count   ?? 0],
             'payments'           => ['total' => $payments,   'count' => $rows['payment']?->count  ?? 0],
             'expenses'           => ['total' => $expenses,   'count' => $rows['expense']?->count  ?? 0],
             'income_adjustments' => ['total' => $incomeAdj,  'count' => $rows['income_adjustment']?->count ?? 0],
@@ -76,6 +98,7 @@ class FinancialTransactionController extends Controller {
             'net'                => $payments + $incomeAdj - $expenses - $payroll,
             'by_tender'          => $byTender,
             'net_by_tender'      => $netByTender,
+            'include_cogs'       => $includeCogs,
         ]);
     }
 

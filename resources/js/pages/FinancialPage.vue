@@ -20,7 +20,6 @@ defineOptions({
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FtSummary {
     period: { start: string; end: string }
-    orders: { total: number; count: number }
     payments: { total: number; count: number }
     expenses: { total: number; count: number }
     income_adjustments: { total: number; count: number }
@@ -28,6 +27,7 @@ interface FtSummary {
     net: number
     by_tender: { tender: string; total: number; count: number }[]
     net_by_tender: { tender: string; total_in: number; total_out: number; net: number; count: number }[]
+    include_cogs: boolean
 }
 interface PaymentTender {
     id: number; name: string; is_active: boolean
@@ -63,6 +63,7 @@ const ftSearch = ref('')
 const ftSortKey = ref<'transacted_at' | 'type' | 'amount' | 'description'>('transacted_at')
 const ftSortDir = ref<'asc' | 'desc'>('desc')
 const tenders = ref<PaymentTender[]>([])
+const includeCogs = ref(true)
 const editingTx = ref<FtTransaction | null>(null)
 const editForm = ref({ description: '', amount: '', notes: '', transacted_at: '', payment_tender_id: null as number | null })
 const editSaving = ref(false)
@@ -198,7 +199,11 @@ const loadFinancial = async (page = 1) => {
     try {
         const [summaryRes, listRes, billsRes] = await Promise.all([
             api.get('/api/v1/financial-transactions/summary', {
-                params: { start_date: ftStartDate.value || undefined, end_date: ftEndDate.value || undefined },
+                params: {
+                    start_date: ftStartDate.value || undefined,
+                    end_date: ftEndDate.value || undefined,
+                    include_cogs: includeCogs.value,
+                },
             }),
             api.get('/api/v1/financial-transactions', {
                 params: {
@@ -206,6 +211,7 @@ const loadFinancial = async (page = 1) => {
                     start_date: ftStartDate.value || undefined,
                     end_date: ftEndDate.value || undefined,
                     type: ftTypeFilter.value || undefined,
+                    include_cogs: includeCogs.value,
                 },
             }),
             api.get('/api/v1/bills/summary', {
@@ -311,11 +317,15 @@ onMounted(async () => {
         <div v-if="ftSummary" class="rounded-xl border bg-card shadow-sm overflow-hidden">
             <button @click="summaryOpen = !summaryOpen"
                 class="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                <h2 class="font-bold text-sm flex items-center gap-2">
+                <h2 class="font-bold text-sm flex items-center gap-2 flex-wrap">
                     <BarChart3 class="h-4 w-4 text-primary" />
                     Financial Overview
                     <span class="text-xs font-normal text-muted-foreground">
                         {{ ftSummary.period?.start }} – {{ ftSummary.period?.end }}
+                    </span>
+                    <span v-if="!includeCogs"
+                        class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        COGS excluded
                     </span>
                 </h2>
                 <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200"
@@ -528,7 +538,6 @@ onMounted(async () => {
                     <select v-model="ftTypeFilter" @change="loadFinancial()"
                         class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="">All Types</option>
-                        <option value="order">Order</option>
                         <option value="payment">Payment</option>
                         <option value="expense">Expense</option>
                         <option value="income_adjustment">Income Adjustment</option>
@@ -543,8 +552,19 @@ onMounted(async () => {
                             class="pl-8 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary w-52" />
                     </div>
                 </div>
+                <!-- COGS toggle -->
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium text-muted-foreground">Include COGS</label>
+                    <button @click="includeCogs = !includeCogs; loadFinancial()"
+                        :class="['relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 self-start mt-0.5',
+                            includeCogs ? 'bg-primary' : 'bg-muted-foreground/30']"
+                        role="switch" :aria-checked="includeCogs">
+                        <span :class="['pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200',
+                            includeCogs ? 'translate-x-5' : 'translate-x-0']" />
+                    </button>
+                </div>
                 <button @click="showEntryForm = !showEntryForm"
-                    class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+                    class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 self-end">
                     <Plus class="h-3.5 w-3.5" /> Record Entry
                 </button>
             </div>
