@@ -9,6 +9,8 @@ use App\Http\Controllers\QueueMonitorController;
 use App\Http\Controllers\InventoryPageController;
 use App\Http\Controllers\ProductPageController;
 use App\Http\Controllers\ReportPageController;
+use App\Http\Controllers\FinancialPageController;
+use App\Http\Controllers\BillsPageController;
 use App\Http\Controllers\OrderDetailPageController;
 use App\Http\Controllers\HrisPageController;
 
@@ -47,6 +49,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('orders/{order}', [OrderDetailPageController::class, 'show'])
         ->name('orders.detail')
         ->middleware('can:view orders');
+
+    // Financial
+    Route::get('financial', [FinancialPageController::class, 'index'])
+        ->name('financial.index')
+        ->middleware('can:view reports');
+
+    // Bills
+    Route::get('bills', [BillsPageController::class, 'index'])
+        ->name('bills.index')
+        ->middleware('can:view reports');
 
     // Reports
     Route::get('reports', [ReportPageController::class, 'index'])
