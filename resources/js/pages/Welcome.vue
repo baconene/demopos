@@ -6,173 +6,202 @@ withDefaults(defineProps<{ canRegister?: boolean }>(), { canRegister: false })
 </script>
 
 <template>
-    <Head title="Bypass Grill — Monster Ribs on Every Bypass Road" />
+    <Head title="DemoPOS — Modern Point of Sale System" />
 
-    <div class="min-h-screen bg-[#0a0602] text-white font-sans overflow-x-hidden">
+    <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white font-sans overflow-x-hidden">
 
         <!-- ── NAV ─────────────────────────────────────────── -->
-        <nav class="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-black/60 backdrop-blur-sm border-b border-orange-900/40">
+        <nav class="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-slate-900/80 backdrop-blur-md border-b border-blue-900/30">
             <div class="flex items-center gap-3">
-                <div class="h-9 w-9 rounded-full border-2 border-orange-500 flex items-center justify-center">
-                    <span class="text-[9px] font-black text-orange-400 leading-tight text-center">BY<br>PASS</span>
+                <div class="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center border border-blue-400">
+                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 6H6.28l-.31-1.243A1 1 0 005 4H3z"></path>
+                        <circle cx="5.5" cy="16.5" r="1.5"></circle>
+                        <circle cx="14.5" cy="16.5" r="1.5"></circle>
+                    </svg>
                 </div>
-                <span class="text-lg font-black tracking-widest text-white">BYPASS <span class="text-orange-500">GRILL</span></span>
+                <span class="text-xl font-bold tracking-tight text-white">Demo<span class="text-blue-400">POS</span></span>
             </div>
             <div class="flex items-center gap-3">
                 <Link v-if="$page.props.auth?.user" :href="dashboard()"
-                    class="rounded-full border border-orange-500 px-5 py-1.5 text-sm font-semibold text-orange-400 hover:bg-orange-500 hover:text-black transition-colors">
+                    class="rounded-lg border border-blue-400 px-5 py-2 text-sm font-semibold text-blue-300 hover:bg-blue-600/30 transition-colors">
                     Dashboard
                 </Link>
                 <Link v-else :href="login()"
-                    class="rounded-full bg-orange-500 px-5 py-1.5 text-sm font-bold text-black hover:bg-orange-400 transition-colors">
-                    Staff Login
+                    class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-500 transition-colors">
+                    Sign In
                 </Link>
             </div>
         </nav>
 
         <!-- ── HERO ───────────────────────────────────────── -->
         <section class="relative min-h-screen flex items-center justify-center pt-20 pb-16 px-6 overflow-hidden">
-            <!-- fire glow bg -->
+            <!-- gradient glow bg -->
             <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full opacity-30"
-                    style="background: radial-gradient(ellipse, #ff6600 0%, #c2410c 30%, transparent 70%); filter: blur(60px);"></div>
-                <div class="absolute top-1/3 left-1/4 w-80 h-80 rounded-full opacity-10"
-                    style="background: radial-gradient(circle, #fbbf24 0%, transparent 70%); filter: blur(40px);"></div>
+                <div class="absolute bottom-0 right-1/4 w-[800px] h-[400px] rounded-full opacity-20"
+                    style="background: radial-gradient(ellipse, #3b82f6 0%, #1e40af 30%, transparent 70%); filter: blur(60px);"></div>
+                <div class="absolute top-1/3 left-1/4 w-96 h-96 rounded-full opacity-10"
+                    style="background: radial-gradient(circle, #60a5fa 0%, transparent 70%); filter: blur(50px);"></div>
             </div>
 
             <div class="relative z-10 max-w-5xl mx-auto text-center">
                 <!-- badge -->
-                <div class="inline-flex items-center gap-2 rounded-full border border-orange-700 bg-orange-950/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-orange-400 mb-8">
-                    <span class="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-                    Now Open · Pop-Up Stores on Bypass Roads
+                <div class="inline-flex items-center gap-2 rounded-full border border-blue-700 bg-blue-950/50 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-blue-400 mb-8">
+                    <span class="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    Modern POS Solution · Enterprise Ready
                 </div>
 
                 <!-- headline -->
                 <h1 class="text-6xl sm:text-7xl md:text-8xl font-black leading-none tracking-tight mb-6">
-                    <span class="block text-white">THE</span>
-                    <span class="block" style="background: linear-gradient(90deg, #f97316, #fbbf24, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                        MONSTER RIB
+                    <span class="block text-white">SEAMLESS</span>
+                    <span class="block" style="background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                        POINT OF SALE
                     </span>
-                    <span class="block text-white text-4xl sm:text-5xl font-light tracking-widest mt-2">EXPERIENCE</span>
+                    <span class="block text-white text-4xl sm:text-5xl font-light tracking-widest mt-2">MANAGEMENT</span>
                 </h1>
 
-                <p class="max-w-xl mx-auto text-lg text-gray-300 leading-relaxed mb-10">
-                    Slow-cooked pork ribs, smoky BBQ glaze, fall-off-the-bone tender.<br>
-                    <span class="text-orange-400 font-semibold">Find us along the bypass road near you.</span>
+                <p class="max-w-2xl mx-auto text-lg text-gray-300 leading-relaxed mb-12">
+                    Complete point-of-sale solution for retail, restaurants, and small businesses.<br>
+                    <span class="text-blue-400 font-semibold">Real-time inventory, sales tracking, and staff management.</span>
                 </p>
 
-                <!-- price badge -->
-                <div class="inline-block bg-orange-500 text-black font-black text-4xl px-8 py-3 rounded-2xl shadow-lg shadow-orange-500/30 mb-10">
-                    ₱165 <span class="text-lg font-bold">/ plate</span>
+                <!-- CTA buttons -->
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+                    <Link :href="login()"
+                        class="bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/30">
+                        Get Started
+                    </Link>
+                    <button class="border-2 border-blue-400 text-blue-300 font-bold px-8 py-3 rounded-lg hover:bg-blue-900/30 transition-colors">
+                        View Demo
+                    </button>
                 </div>
 
-                <!-- rib visual -->
-                <div class="flex justify-center items-end gap-1 mt-2 mb-12 select-none" aria-hidden="true">
-                    <div class="w-3 h-24 rounded-full bg-gradient-to-t from-orange-900 to-orange-600 opacity-80"></div>
-                    <div class="w-4 h-32 rounded-full bg-gradient-to-t from-orange-800 to-yellow-600 shadow-lg shadow-orange-600/40"></div>
-                    <div class="w-5 h-40 rounded-full bg-gradient-to-t from-red-900 to-orange-500 shadow-xl shadow-orange-500/50"></div>
-                    <div class="w-6 h-44 rounded-full bg-gradient-to-t from-red-800 to-yellow-500 shadow-2xl shadow-yellow-500/40"></div>
-                    <div class="w-6 h-48 rounded-full bg-gradient-to-t from-orange-900 to-orange-400 shadow-2xl shadow-orange-400/60 scale-105"></div>
-                    <div class="w-6 h-44 rounded-full bg-gradient-to-t from-red-800 to-yellow-500 shadow-2xl shadow-yellow-500/40"></div>
-                    <div class="w-5 h-40 rounded-full bg-gradient-to-t from-red-900 to-orange-500 shadow-xl shadow-orange-500/50"></div>
-                    <div class="w-4 h-32 rounded-full bg-gradient-to-t from-orange-800 to-yellow-600 shadow-lg shadow-orange-600/40"></div>
-                    <div class="w-3 h-24 rounded-full bg-gradient-to-t from-orange-900 to-orange-600 opacity-80"></div>
+                <!-- Feature icons -->
+                <div class="flex justify-center items-center gap-6 select-none mb-8 flex-wrap">
+                    <div class="flex flex-col items-center">
+                        <div class="w-12 h-12 rounded-lg bg-blue-900/50 border border-blue-700 flex items-center justify-center mb-2">
+                            <svg class="w-6 h-6 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-semibold text-gray-300">Fast Checkout</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <div class="w-12 h-12 rounded-lg bg-blue-900/50 border border-blue-700 flex items-center justify-center mb-2">
+                            <svg class="w-6 h-6 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 6H6.28l-.31-1.243A1 1 0 005 4H3z"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-semibold text-gray-300">Inventory</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <div class="w-12 h-12 rounded-lg bg-blue-900/50 border border-blue-700 flex items-center justify-center mb-2">
+                            <svg class="w-6 h-6 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-semibold text-gray-300">Analytics</span>
+                    </div>
                 </div>
 
-                <p class="text-xs uppercase tracking-widest text-gray-500">Scroll to discover the full menu</p>
+                <p class="text-xs uppercase tracking-widest text-gray-500">Used by 10,000+ businesses worldwide</p>
             </div>
         </section>
 
-        <!-- ── STAR PRODUCT ────────────────────────────────── -->
-        <section class="py-24 px-6 border-t border-orange-900/30">
+        <!-- ── KEY FEATURES ────────────────────────────────── -->
+        <section class="py-24 px-6 border-t border-blue-900/30">
             <div class="max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
                 <!-- visual -->
                 <div class="relative flex items-center justify-center">
-                    <div class="absolute w-72 h-72 rounded-full opacity-40"
-                        style="background: radial-gradient(circle, #f97316, transparent 70%); filter: blur(50px);"></div>
-                    <div class="relative z-10 w-56 h-56 rounded-full bg-gradient-to-br from-yellow-800 via-orange-700 to-red-900 border-4 border-orange-500 flex items-center justify-center shadow-2xl shadow-orange-600/50">
-                        <span class="text-8xl select-none">🍖</span>
+                    <div class="absolute w-72 h-72 rounded-full opacity-30"
+                        style="background: radial-gradient(circle, #3b82f6, transparent 70%); filter: blur(50px);"></div>
+                    <div class="relative z-10 w-56 h-56 rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-slate-800 border-4 border-blue-500 flex items-center justify-center shadow-2xl shadow-blue-600/50">
+                        <svg class="w-32 h-32 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                        </svg>
                     </div>
-                    <div class="absolute top-4 right-8 bg-orange-500 text-black text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider rotate-12 shadow-lg">
-                        Best Seller
+                    <div class="absolute top-4 right-8 bg-blue-500 text-white text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider rotate-12 shadow-lg">
+                        Enterprise
                     </div>
                 </div>
 
                 <!-- text -->
                 <div>
-                    <p class="text-orange-500 text-xs font-bold uppercase tracking-widest mb-3">Signature Dish</p>
+                    <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">Core Platform</p>
                     <h2 class="text-4xl sm:text-5xl font-black mb-5 leading-tight">
-                        Pork Monster<br>
-                        <span class="text-orange-400">Ribs Combo</span>
+                        All-in-One<br>
+                        <span class="text-blue-300">POS System</span>
                     </h2>
                     <p class="text-gray-300 leading-relaxed mb-6">
-                        Slow-cooked pork ribs na malambot at makatas, binablog sa smoky BBQ sauce—malasa hanggang buto! Served with <strong class="text-white">1 cup rice</strong> and <strong class="text-white">1 side dish</strong> for a complete, satisfying meal.
+                        Manage your entire business from one unified platform. Process transactions, track inventory in real-time, monitor staff performance, and generate detailed sales reports instantly.
                     </p>
                     <div class="flex flex-wrap gap-3 mb-8">
-                        <span class="rounded-full bg-orange-950 border border-orange-800 px-4 py-1.5 text-sm text-orange-300">🔥 Slow-Cooked</span>
-                        <span class="rounded-full bg-orange-950 border border-orange-800 px-4 py-1.5 text-sm text-orange-300">🍚 Rice + Side</span>
-                        <span class="rounded-full bg-orange-950 border border-orange-800 px-4 py-1.5 text-sm text-orange-300">500 kcal</span>
+                        <span class="rounded-full bg-blue-950 border border-blue-800 px-4 py-1.5 text-sm text-blue-300">💳 Payments</span>
+                        <span class="rounded-full bg-blue-950 border border-blue-800 px-4 py-1.5 text-sm text-blue-300">📦 Inventory</span>
+                        <span class="rounded-full bg-blue-950 border border-blue-800 px-4 py-1.5 text-sm text-blue-300">👥 Staff Mgmt</span>
                     </div>
-                    <div class="text-5xl font-black text-orange-400">₱165</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── MENU GRID ────────────────────────────────────── -->
-        <section class="py-24 px-6 bg-gradient-to-b from-transparent to-black/40">
+                    <Link :href="dashboard()" v-if="$page.props.auth?.user"
+                        class="text-blue-400 font-bold hover:text-blue-300 transition-colors">
+                        Go to Dashboard →
+                FEATURES GRID ────────────────────────────────── -->
+        <section class="py-24 px-6 bg-gradient-to-b from-transparent to-slate-900/50">
             <div class="max-w-5xl mx-auto">
                 <div class="text-center mb-14">
-                    <p class="text-orange-500 text-xs font-bold uppercase tracking-widest mb-3">Fresh Off The Grill</p>
-                    <h2 class="text-4xl font-black">Full Menu</h2>
+                    <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">Powerful Capabilities</p>
+                    <h2 class="text-4xl font-black">Packed with Features</h2>
                 </div>
 
                 <div class="grid sm:grid-cols-2 gap-6">
                     <div v-for="item in [
-                        { emoji: '🍖', name: 'Pork Monster Ribs', price: '₱165', desc: 'Slow-cooked, smoky BBQ glazed pork ribs. Fall-off-the-bone tender.', tag: 'Star' },
-                        { emoji: '🌭', name: 'Grilled Hungarian Sausage', price: '₱99', desc: 'Juicy Hungarian sausage inihaw sa smoky perfection—malasa at satisfying.', tag: null },
-                        { emoji: '🍗', name: 'Boneless Chicken Thigh BBQ', price: '₱145', desc: 'Marinated boneless chicken thigh, grilled with our signature BBQ glaze.', tag: null },
-                        { emoji: '🥩', name: 'Lucban Longganisa', price: '₱115', desc: 'Golden-brown garlicky longganisa with rich savory flavor sa bawat kagat.', tag: null },
+                        { icon: '💳', name: 'Multi-Payment Methods', desc: 'Accept cash, cards, mobile payments, and online transfers all in one place.', tag: 'Popular' },
+                        { icon: '📊', name: 'Advanced Analytics', desc: 'Real-time sales dashboards with detailed reports and business insights.', tag: null },
+                        { icon: '📦', name: 'Smart Inventory', desc: 'Track stock levels, auto-reorder alerts, and multi-location management.', tag: null },
+                        { icon: '👥', name: 'Staff Management', desc: 'Employee profiles, shift scheduling, sales tracking, and performance metrics.', tag: null },
                     ]" :key="item.name"
-                        class="group relative flex gap-5 items-start rounded-2xl border border-white/5 bg-white/3 p-5 hover:border-orange-700/60 hover:bg-orange-950/30 transition-all duration-300"
+                        class="group relative flex gap-5 items-start rounded-2xl border border-white/5 bg-white/3 p-5 hover:border-blue-700/60 hover:bg-blue-950/30 transition-all duration-300"
                         style="background: rgba(255,255,255,0.02)">
-                        <div v-if="item.tag" class="absolute top-3 right-3 bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                        <div v-if="item.tag" class="absolute top-3 right-3 bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
                             {{ item.tag }}
                         </div>
-                        <div class="shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-orange-900 to-red-950 border border-orange-800/40 flex items-center justify-center text-3xl shadow-inner">
-                            {{ item.emoji }}
+                        <div class="shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-blue-900 to-blue-950 border border-blue-800/40 flex items-center justify-center text-3xl shadow-inner">
+                            {{ item.icon }}
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-baseline justify-between gap-2 mb-1">
                                 <h3 class="font-bold text-white text-sm leading-tight">{{ item.name }}</h3>
-                                <span class="shrink-0 text-lg font-black text-orange-400">{{ item.price }}</span>
                             </div>
                             <p class="text-xs text-gray-400 leading-relaxed">{{ item.desc }}</p>
                         </div>
                     </div>
                 </div>
 
-                <p class="text-center text-xs text-gray-500 mt-6">All combos served with 1 rice + 1 side dish.</p>
-            </div>
-        </section>
+                <p class="text-center text-xs text-gray-500 mt-6">Everything you need to run your business efficiently
+                        </div>
+                    </div>
+                </div>
 
-        <!-- ── POP-UP STORE CONCEPT ────────────────────────── -->
-        <section class="py-24 px-6 border-t border-orange-900/30">
+                WHY DEMOPOS ────────────────────────────────── -->
+        <section class="py-24 px-6 border-t border-blue-900/30">
             <div class="max-w-5xl mx-auto text-center mb-16">
-                <p class="text-orange-500 text-xs font-bold uppercase tracking-widest mb-3">Our Concept</p>
+                <p class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3">Why Choose DemoPOS</p>
                 <h2 class="text-4xl sm:text-5xl font-black mb-6 leading-tight">
-                    Where The<br>
-                    <span class="text-orange-400">Road Meets The Grill</span>
+                    Built For<br>
+                    <span class="text-blue-300">Modern Retailers</span>
                 </h2>
                 <p class="max-w-2xl mx-auto text-gray-300 leading-relaxed text-lg">
-                    Bypass Grill is a <strong class="text-white">pop-up grill store</strong> strategically located along
-                    <strong class="text-white">bypass roads</strong>—the routes commuters and travelers use every day.
-                    No fancy dining room. Just <strong class="text-orange-400">real fire, real flavor</strong>, served fast.
+                    DemoPOS is a <strong class="text-white">comprehensive point-of-sale solution</strong> designed for
+                    <strong class="text-white">retail stores, restaurants, and small businesses</strong>.
+                    We provide <strong class="text-blue-400">powerful tools, easy operations</strong>, and exceptional support.
                 </p>
             </div>
 
             <div class="max-w-5xl mx-auto grid sm:grid-cols-3 gap-6">
                 <div v-for="card in [
-                    { icon: '📍', title: 'Bypass Road Locations', body: 'Every store is set up along a bypass road — easy to spot, easy to stop at, impossible to miss.' },
+                    { icon: '⚡', title: 'Fast Setup', body: 'Get your POS system up and running in minutes. No complicated configuration required.' },
+                    { icon: '🔐', title: 'Secure & Reliable', body: 'Enterprise-grade security with data encryption, backups, and 99.9% uptime guarantee.' },
+                    { icon: '📞', title: '24/7 Support', body: 'Dedicated support team ready to help you 24/7. Priority assistance for all clients.' },
+                ]" :key="card.title"
+                    class="rounded-2xl border border-white/5 p-6 text-center hover:border-blualong a bypass road — easy to spot, easy to stop at, impossible to miss.' },
                     { icon: '🔥', title: 'Live Fire Grilling', body: 'We grill fresh in front of you. No reheated food. Every plate leaves the grill hot and smoky.' },
                     { icon: '⚡', title: 'Fast & Affordable', body: 'Combo meals starting at ₱99. Grab-and-go friendly. Perfect for commuters and families on the move.' },
                 ]" :key="card.title"
@@ -181,15 +210,20 @@ withDefaults(defineProps<{ canRegister?: boolean }>(), { canRegister: false })
                     <div class="text-5xl mb-5">{{ card.icon }}</div>
                     <h3 class="font-bold text-white mb-3">{{ card.title }}</h3>
                     <p class="text-sm text-gray-400 leading-relaxed">{{ card.body }}</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── TAGLINE BANNER ──────────────────────────────── -->
+                CTA BANNER ──────────────────────────────── -->
         <section class="py-20 px-6 text-center relative overflow-hidden">
             <div class="absolute inset-0 pointer-events-none"
-                style="background: linear-gradient(180deg, transparent, rgba(249,115,22,0.08), transparent);"></div>
+                style="background: linear-gradient(180deg, transparent, rgba(59,130,246,0.08), transparent);"></div>
             <div class="relative z-10 max-w-3xl mx-auto">
+                <p class="text-3xl sm:text-4xl font-black leading-tight text-white mb-6">
+                    Ready to transform your retail business?<br>
+                    <span class="text-blue-400">Start your free trial today.</span>
+                </p>
+                <Link :href="login()"
+                    class="inline-block bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-500 transition-colors">
+                    Get Started for Free
+                </Link>
+                <p class="text-gray-400 text-sm uppercase tracking-widest mt-6">DemoPOS · Modern Point of Sale System
                 <p class="text-3xl sm:text-4xl font-black leading-tight text-white mb-4">
                     "Kain agad—<span class="text-orange-400">mas solid habang mainit!</span>"
                 </p>
