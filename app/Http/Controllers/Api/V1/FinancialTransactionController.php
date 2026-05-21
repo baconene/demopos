@@ -29,6 +29,7 @@ class FinancialTransactionController extends Controller {
             ->get()
             ->keyBy('type');
 
+        // Payments by tender (credits only — for the tender summary cards)
         $byTender = FinancialTransaction::where('type', 'payment')
             ->whereBetween('transacted_at', [$start, $end])
             ->with('tender')
@@ -40,6 +41,25 @@ class FinancialTransactionController extends Controller {
                 'total'  => (float) $r->total,
                 'count'  => $r->count,
             ]);
+
+        // Net balance per tender — all tagged types (in: payment + income_adj, out: expense + payroll + order)
+        $netByTender = FinancialTransaction::whereBetween('transacted_at', [$start, $end])
+            ->whereNotNull('payment_tender_id')
+            ->with('tender')
+            ->selectRaw("payment_tender_id,
+                SUM(CASE WHEN type IN ('payment','income_adjustment') THEN amount ELSE 0 END) as total_in,
+                SUM(CASE WHEN type IN ('expense','payroll','order')   THEN amount ELSE 0 END) as total_out,
+                COUNT(*) as cnt")
+            ->groupBy('payment_tender_id')
+            ->get()
+            ->map(fn($r) => [
+                'tender'    => $r->tender?->name ?? 'Unknown',
+                'total_in'  => round((float) $r->total_in,  2),
+                'total_out' => round((float) $r->total_out, 2),
+                'net'       => round((float) $r->total_in - (float) $r->total_out, 2),
+                'count'     => (int) $r->cnt,
+            ])
+            ->values();
 
         $incomeAdj = (float)($rows['income_adjustment']?->total ?? 0);
         $expenses  = (float)($rows['expense']?->total ?? 0);
@@ -55,26 +75,29 @@ class FinancialTransactionController extends Controller {
             'payroll'            => ['total' => $payroll,    'count' => $rows['payroll']?->count  ?? 0],
             'net'                => $payments + $incomeAdj - $expenses - $payroll,
             'by_tender'          => $byTender,
+            'net_by_tender'      => $netByTender,
         ]);
     }
 
     public function store(Request $request): JsonResponse {
         if (! auth()->user()?->hasAnyRole('admin', 'auditor')) abort(403);
         $data = $request->validate([
-            'type'          => 'required|in:expense,income_adjustment',
-            'amount'        => 'required|numeric|min:0.01',
-            'description'   => 'required|string|max:255',
-            'notes'         => 'nullable|string',
-            'transacted_at' => 'nullable|date',
+            'type'               => 'required|in:expense,income_adjustment',
+            'amount'             => 'required|numeric|min:0.01',
+            'description'        => 'required|string|max:255',
+            'notes'              => 'nullable|string',
+            'transacted_at'      => 'nullable|date',
+            'payment_tender_id'  => 'nullable|exists:payment_tenders,id',
         ]);
 
         $tx = FinancialTransaction::create([
-            'type'          => $data['type'],
-            'amount'        => $data['amount'],
-            'description'   => $data['description'],
-            'notes'         => $data['notes'] ?? null,
-            'user_id'       => auth()->id(),
-            'transacted_at' => $data['transacted_at'] ?? now(),
+            'type'               => $data['type'],
+            'amount'             => $data['amount'],
+            'description'        => $data['description'],
+            'notes'              => $data['notes'] ?? null,
+            'user_id'            => auth()->id(),
+            'transacted_at'      => $data['transacted_at'] ?? now(),
+            'payment_tender_id'  => $data['payment_tender_id'] ?? null,
             // running_balance is computed automatically by FinancialTransaction::boot()
         ]);
         return response()->json($tx, 201);

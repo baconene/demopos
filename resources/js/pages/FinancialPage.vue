@@ -27,6 +27,10 @@ interface FtSummary {
     payroll: { total: number; count: number }
     net: number
     by_tender: { tender: string; total: number; count: number }[]
+    net_by_tender: { tender: string; total_in: number; total_out: number; net: number; count: number }[]
+}
+interface PaymentTender {
+    id: number; name: string; is_active: boolean
 }
 interface FtTransaction {
     id: number; type: string; amount: number; description: string; transacted_at: string
@@ -50,13 +54,15 @@ const ftTransactions = ref<FtTransaction[]>([])
 const ftMeta = ref<any>(null)
 const ftPage = ref(1)
 const showEntryForm = ref(false)
-const entryForm = ref({ type: 'expense' as 'expense' | 'income_adjustment', description: '', amount: '', notes: '', transacted_at: '' })
+const entryForm = ref({ type: 'expense' as 'expense' | 'income_adjustment', description: '', amount: '', notes: '', transacted_at: '', payment_tender_id: null as number | null })
 const entrySaving = ref(false)
 const ftDeleting = ref<number | null>(null)
 const summaryOpen = ref(true)
+const showTenderBreakdown = ref(false)
 const ftSearch = ref('')
 const ftSortKey = ref<'transacted_at' | 'type' | 'amount' | 'description'>('transacted_at')
 const ftSortDir = ref<'asc' | 'desc'>('desc')
+const tenders = ref<PaymentTender[]>([])
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (v: number | string | null | undefined) =>
@@ -177,6 +183,13 @@ const toggleSort = (key: typeof ftSortKey.value) => {
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────────
+const loadTenders = async () => {
+    try {
+        const res = await api.get('/api/v1/payment-tenders/all')
+        tenders.value = (res.data?.data ?? res.data ?? []).filter((t: PaymentTender) => t.is_active)
+    } catch { /* non-fatal */ }
+}
+
 const loadFinancial = async (page = 1) => {
     ftPage.value = page
     try {
@@ -216,10 +229,11 @@ const saveEntry = async () => {
             description: entryForm.value.description,
             notes: entryForm.value.notes || null,
             transacted_at: entryForm.value.transacted_at || null,
+            payment_tender_id: entryForm.value.payment_tender_id || null,
         })
         const label = entryForm.value.type === 'income_adjustment' ? 'Income adjustment' : 'Expense'
         toast.success(`${label} recorded.`)
-        entryForm.value = { type: 'expense', description: '', amount: '', notes: '', transacted_at: '' }
+        entryForm.value = { type: 'expense', description: '', amount: '', notes: '', transacted_at: '', payment_tender_id: null }
         showEntryForm.value = false
         await loadFinancial()
     } catch (err: any) {
@@ -245,7 +259,7 @@ const deleteTransaction = async (tx: FtTransaction) => {
 
 onMounted(async () => {
     loading.value = true
-    try { await loadFinancial() } finally { loading.value = false }
+    try { await Promise.all([loadFinancial(), loadTenders()]) } finally { loading.value = false }
 })
 </script>
 
@@ -335,17 +349,22 @@ onMounted(async () => {
 
                         <!-- 3 key metric chips -->
                         <div class="grid grid-cols-3 gap-3">
-                            <div :class="['rounded-xl border p-3 text-center',
-                                ftSummary.net >= 0
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
-                                    : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800']">
-                                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Net Cash</p>
+                            <!-- Net Cash — clickable to reveal tender breakdown -->
+                            <button @click="showTenderBreakdown = !showTenderBreakdown"
+                                :class="['rounded-xl border p-3 text-center w-full transition-colors',
+                                    ftSummary.net >= 0
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/40'
+                                        : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-950/40']">
+                                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center justify-center gap-1">
+                                    Net Cash
+                                    <ChevronDown class="h-3 w-3 transition-transform duration-200" :class="showTenderBreakdown ? 'rotate-180' : ''" />
+                                </p>
                                 <p class="text-base font-black leading-tight tabular-nums"
                                     :class="ftSummary.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'">
                                     {{ fmt(ftSummary.net) }}
                                 </p>
                                 <p class="text-[10px] text-muted-foreground mt-0.5">{{ ftSummary.net >= 0 ? 'Surplus' : 'Deficit' }}</p>
-                            </div>
+                            </button>
 
                             <div class="rounded-xl border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 p-3 text-center">
                                 <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Payables Due</p>
@@ -360,6 +379,62 @@ onMounted(async () => {
                                 <p class="text-base font-black text-blue-600 leading-tight tabular-nums">{{ fmt(totalIncome) }}</p>
                                 <p class="text-[10px] text-muted-foreground mt-0.5">payments + adj.</p>
                             </div>
+                        </div>
+
+                        <!-- Tender Balances — expanded when Net Cash is clicked -->
+                        <div v-show="showTenderBreakdown"
+                            class="rounded-xl border bg-background overflow-hidden transition-all duration-200">
+                            <div class="px-4 py-2.5 bg-muted/40 border-b flex items-center justify-between">
+                                <h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deposit / Account Balances</h3>
+                                <p class="text-[10px] text-muted-foreground">per tender, this period</p>
+                            </div>
+                            <div v-if="ftSummary.net_by_tender?.length > 0" class="overflow-x-auto">
+                                <table class="w-full text-xs">
+                                    <thead>
+                                        <tr class="border-b text-muted-foreground bg-muted/20">
+                                            <th class="px-4 py-2 text-left font-medium">Tender / Account</th>
+                                            <th class="px-4 py-2 text-right font-medium text-green-700">Money In</th>
+                                            <th class="px-4 py-2 text-right font-medium text-red-600">Money Out</th>
+                                            <th class="px-4 py-2 text-right font-medium">Net</th>
+                                            <th class="px-4 py-2 text-right font-medium text-muted-foreground">Txns</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-border">
+                                        <tr v-for="row in ftSummary.net_by_tender" :key="row.tender"
+                                            class="hover:bg-muted/20 transition-colors">
+                                            <td class="px-4 py-2.5 font-semibold">{{ row.tender }}</td>
+                                            <td class="px-4 py-2.5 text-right tabular-nums text-green-600 font-medium">+{{ fmt(row.total_in) }}</td>
+                                            <td class="px-4 py-2.5 text-right tabular-nums text-red-600 font-medium">-{{ fmt(row.total_out) }}</td>
+                                            <td class="px-4 py-2.5 text-right tabular-nums font-bold"
+                                                :class="row.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'">
+                                                {{ row.net >= 0 ? '+' : '' }}{{ fmt(row.net) }}
+                                            </td>
+                                            <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ row.count }}</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="border-t border-border bg-muted/30">
+                                        <tr>
+                                            <td class="px-4 py-2 font-bold text-xs">Total</td>
+                                            <td class="px-4 py-2 text-right tabular-nums font-bold text-green-700 text-xs">
+                                                +{{ fmt(ftSummary.net_by_tender.reduce((s, r) => s + r.total_in, 0)) }}
+                                            </td>
+                                            <td class="px-4 py-2 text-right tabular-nums font-bold text-red-600 text-xs">
+                                                -{{ fmt(ftSummary.net_by_tender.reduce((s, r) => s + r.total_out, 0)) }}
+                                            </td>
+                                            <td class="px-4 py-2 text-right tabular-nums font-black text-xs"
+                                                :class="ftSummary.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'">
+                                                {{ fmt(ftSummary.net_by_tender.reduce((s, r) => s + r.net, 0)) }}
+                                            </td>
+                                            <td class="px-4 py-2 text-right tabular-nums text-muted-foreground text-xs">
+                                                {{ ftSummary.net_by_tender.reduce((s, r) => s + r.count, 0) }}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <p v-else class="px-4 py-4 text-xs text-muted-foreground text-center">
+                                No tender-tagged transactions in this period. Tag expenses and income adjustments to a tender when recording entries.
+                            </p>
                         </div>
 
                         <!-- Cash flow comparison bars -->
@@ -467,6 +542,17 @@ onMounted(async () => {
                     <label class="text-xs font-medium text-muted-foreground block mb-1">Notes</label>
                     <input v-model="entryForm.notes" type="text" placeholder="Optional reference"
                         class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground block mb-1">
+                        Tender / Account
+                        <span class="text-muted-foreground/60 font-normal">(optional)</span>
+                    </label>
+                    <select v-model="entryForm.payment_tender_id"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option :value="null">— Not tagged —</option>
+                        <option v-for="t in tenders" :key="t.id" :value="t.id">{{ t.name }}</option>
+                    </select>
                 </div>
             </div>
             <div class="flex gap-2 mt-3">
