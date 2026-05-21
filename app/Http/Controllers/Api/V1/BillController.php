@@ -157,6 +157,60 @@ class BillController extends Controller
         return response()->json(['data' => $this->format($bill->fresh()->load('installments'))]);
     }
 
+    public function summary(Request $request): JsonResponse
+    {
+        $this->checkAuth();
+        $today     = Carbon::today();
+        $startDate = $request->input('start_date')
+            ? Carbon::parse($request->input('start_date'))->startOfDay()
+            : $today->copy()->startOfMonth();
+        $endDate   = $request->input('end_date')
+            ? Carbon::parse($request->input('end_date'))->endOfDay()
+            : $today->copy()->endOfMonth();
+
+        $bills    = Bill::with('installments')->where('is_active', true)->get();
+        $totalDue = 0.0;
+        $overdue  = 0.0;
+        $count    = 0;
+
+        foreach ($bills as $bill) {
+            if ($bill->is_installment) {
+                foreach ($bill->installments->whereNull('paid_at') as $inst) {
+                    $due = Carbon::parse($inst->due_date);
+                    if ($due->between($startDate, $endDate)) {
+                        $totalDue += (float) $inst->amount;
+                        if ($due->lt($today)) $overdue += (float) $inst->amount;
+                        $count++;
+                    }
+                }
+            } else {
+                $current = Carbon::parse($bill->due_date);
+                // Advance until we reach the start of the date range
+                while ($current->lt($startDate)) {
+                    $next = $this->advance($current, $bill->frequency);
+                    if ($next === null) { $current = null; break; }
+                    $current = $next;
+                }
+                if ($current === null) continue;
+                // Collect all occurrences within [startDate, endDate]
+                while ($current !== null && $current->lte($endDate)) {
+                    $totalDue += (float) $bill->amount;
+                    if ($current->lt($today)) $overdue += (float) $bill->amount;
+                    $count++;
+                    $current = $this->advance($current, $bill->frequency);
+                }
+            }
+        }
+
+        return response()->json([
+            'total_due' => round($totalDue, 2),
+            'overdue'   => round($overdue, 2),
+            'upcoming'  => round($totalDue - $overdue, 2),
+            'count'     => $count,
+            'period'    => ['start' => $startDate->toDateString(), 'end' => $endDate->toDateString()],
+        ]);
+    }
+
     public function forecast(Request $request): JsonResponse
     {
         $this->checkAuth();

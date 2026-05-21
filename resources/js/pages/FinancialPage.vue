@@ -33,6 +33,10 @@ interface FtTransaction {
     running_balance: number
     user?: { name: string }; tender?: { name: string }
 }
+interface BillsSummary {
+    total_due: number; overdue: number; upcoming: number; count: number
+    period: { start: string; end: string }
+}
 
 // ── State ──────────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().split('T')[0]
@@ -41,6 +45,7 @@ const ftEndDate = ref(today)
 const ftTypeFilter = ref('')
 const loading = ref(false)
 const ftSummary = ref<FtSummary | null>(null)
+const billsSummary = ref<BillsSummary | null>(null)
 const ftTransactions = ref<FtTransaction[]>([])
 const ftMeta = ref<any>(null)
 const ftPage = ref(1)
@@ -82,20 +87,19 @@ const isCredit = (t: string) => t === 'payment' || t === 'income_adjustment'
 const pieData = computed(() => {
     if (!ftSummary.value) return []
     const s = ftSummary.value
+    // Allocation: Payments, Expenses, Income Adj., Payroll (excludes raw order count)
     const items = [
-        { label: 'Orders',      value: s.orders.total,                   color: '#3b82f6' },
         { label: 'Payments',    value: s.payments.total,                 color: '#22c55e' },
         { label: 'Expenses',    value: s.expenses.total,                 color: '#ef4444' },
         { label: 'Income Adj.', value: s.income_adjustments?.total ?? 0, color: '#14b8a6' },
         { label: 'Payroll',     value: s.payroll?.total ?? 0,            color: '#a855f7' },
     ].filter(i => i.value > 0)
     const total = items.reduce((sum, i) => sum + i.value, 0)
-    if (!total || items.length === 0) return []
+    if (!total) return []
     const R = 70, r = 42, cx = 90, cy = 90
     const arcPath = (sa: number, ea: number): string => {
         const sweep = ea - sa
         if (sweep >= Math.PI * 2 - 0.001) {
-            // Full circle: split into two halves to avoid degenerate arc
             const mid = sa + Math.PI
             return [
                 `M${cx + R * Math.cos(sa)} ${cy + R * Math.sin(sa)}`,
@@ -121,6 +125,27 @@ const pieData = computed(() => {
         angle = ea
         return { ...item, pct: Math.round((item.value / total) * 100), path: arcPath(sa, ea) }
     })
+})
+
+const comparisonBars = computed(() => {
+    if (!ftSummary.value) return []
+    const s = ftSummary.value
+    const income  = s.payments.total + (s.income_adjustments?.total ?? 0)
+    const outflow = s.expenses.total + (s.payroll?.total ?? 0)
+    const payable = billsSummary.value?.total_due ?? 0
+    const items = [
+        { label: 'Total Income',  value: income,  barColor: 'bg-blue-500',    textColor: 'text-blue-600' },
+        { label: 'Total Outflow', value: outflow, barColor: 'bg-red-500',     textColor: 'text-red-600' },
+        { label: 'Net Cash',      value: s.net,   barColor: s.net >= 0 ? 'bg-emerald-500' : 'bg-red-600', textColor: s.net >= 0 ? 'text-emerald-600' : 'text-red-600' },
+        { label: 'Payables Due',  value: payable, barColor: 'bg-orange-500',  textColor: 'text-orange-600' },
+    ]
+    const maxVal = Math.max(...items.map(i => Math.abs(i.value)), 1)
+    return items.map(i => ({ ...i, pct: Math.round((Math.abs(i.value) / maxVal) * 100) }))
+})
+
+const totalIncome = computed(() => {
+    if (!ftSummary.value) return 0
+    return ftSummary.value.payments.total + (ftSummary.value.income_adjustments?.total ?? 0)
 })
 
 const sortedTx = computed(() => {
@@ -155,7 +180,7 @@ const toggleSort = (key: typeof ftSortKey.value) => {
 const loadFinancial = async (page = 1) => {
     ftPage.value = page
     try {
-        const [summaryRes, listRes] = await Promise.all([
+        const [summaryRes, listRes, billsRes] = await Promise.all([
             api.get('/api/v1/financial-transactions/summary', {
                 params: { start_date: ftStartDate.value || undefined, end_date: ftEndDate.value || undefined },
             }),
@@ -167,10 +192,14 @@ const loadFinancial = async (page = 1) => {
                     type: ftTypeFilter.value || undefined,
                 },
             }),
+            api.get('/api/v1/bills/summary', {
+                params: { start_date: ftStartDate.value || undefined, end_date: ftEndDate.value || undefined },
+            }).catch(() => ({ data: null })),
         ])
         ftSummary.value = summaryRes.data
         ftTransactions.value = listRes.data.data ?? []
         ftMeta.value = listRes.data.meta ?? null
+        billsSummary.value = billsRes.data
     } catch (err: any) {
         toast.error(err.response?.data?.message ?? 'Failed to load transactions.')
     }
@@ -216,11 +245,7 @@ const deleteTransaction = async (tx: FtTransaction) => {
 
 onMounted(async () => {
     loading.value = true
-    try {
-        await loadFinancial()
-    } finally {
-        loading.value = false
-    }
+    try { await loadFinancial() } finally { loading.value = false }
 })
 </script>
 
@@ -228,13 +253,14 @@ onMounted(async () => {
     <Head title="Financial Transactions" />
 
     <div class="space-y-5 p-6">
-        <!-- Collapsible summary section -->
+
+        <!-- ── Collapsible Financial Overview ───────────────────────────────── -->
         <div v-if="ftSummary" class="rounded-xl border bg-card shadow-sm overflow-hidden">
             <button @click="summaryOpen = !summaryOpen"
                 class="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
                 <h2 class="font-bold text-sm flex items-center gap-2">
                     <BarChart3 class="h-4 w-4 text-primary" />
-                    Financial Summary
+                    Financial Overview
                     <span class="text-xs font-normal text-muted-foreground">
                         {{ ftSummary.period?.start }} – {{ ftSummary.period?.end }}
                     </span>
@@ -244,86 +270,101 @@ onMounted(async () => {
             </button>
 
             <div v-show="summaryOpen" class="border-t p-4 space-y-4">
-                <!-- 6 metric cards -->
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <div class="rounded-xl border bg-background p-4">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><BarChart3 class="h-3 w-3 text-blue-500" /> Orders</p>
-                        <p class="text-2xl font-black">{{ ftSummary.orders.count }}</p>
-                        <p class="text-sm font-semibold text-blue-600 mt-0.5">{{ fmt(ftSummary.orders.total) }}</p>
-                    </div>
-                    <div class="rounded-xl border bg-background p-4">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingUp class="h-3 w-3 text-green-500" /> Payments</p>
-                        <p class="text-2xl font-black">{{ ftSummary.payments.count }}</p>
-                        <p class="text-sm font-semibold text-green-600 mt-0.5">{{ fmt(ftSummary.payments.total) }}</p>
-                    </div>
-                    <div class="rounded-xl border bg-background p-4">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingDown class="h-3 w-3 text-red-500" /> Expenses</p>
-                        <p class="text-2xl font-black">{{ ftSummary.expenses.count }}</p>
-                        <p class="text-sm font-semibold text-red-600 mt-0.5">{{ fmt(ftSummary.expenses.total) }}</p>
-                    </div>
-                    <div class="rounded-xl border bg-background p-4">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingUp class="h-3 w-3 text-teal-500" /> Income Adj.</p>
-                        <p class="text-2xl font-black">{{ ftSummary.income_adjustments?.count ?? 0 }}</p>
-                        <p class="text-sm font-semibold text-teal-600 mt-0.5">{{ fmt(ftSummary.income_adjustments?.total ?? 0) }}</p>
-                    </div>
-                    <div class="rounded-xl border bg-background p-4">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingDown class="h-3 w-3 text-purple-500" /> Payroll</p>
-                        <p class="text-2xl font-black">{{ ftSummary.payroll?.count ?? 0 }}</p>
-                        <p class="text-sm font-semibold text-purple-600 mt-0.5">{{ fmt(ftSummary.payroll?.total ?? 0) }}</p>
-                    </div>
-                    <div :class="['rounded-xl border p-4', ftSummary.net >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800']">
-                        <p class="text-xs text-muted-foreground mb-1 flex items-center gap-1"><DollarSign class="h-3 w-3" /> Net Cash</p>
-                        <p class="text-2xl font-black" :class="ftSummary.net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600'">{{ fmt(ftSummary.net) }}</p>
-                        <p class="text-xs text-muted-foreground mt-0.5">{{ ftSummary.net >= 0 ? 'Surplus' : 'Deficit' }}</p>
-                    </div>
-                </div>
+                <div class="grid lg:grid-cols-2 gap-5">
 
-                <!-- Pie chart + Tender breakdown -->
-                <div class="grid lg:grid-cols-2 gap-4">
-                    <!-- Donut allocation chart -->
-                    <div v-if="pieData.length > 0" class="rounded-xl border bg-background p-4">
-                        <h3 class="font-bold text-sm mb-3">Allocation by Type</h3>
-                        <div class="flex items-center gap-6">
-                            <svg viewBox="0 0 180 180" style="width:140px;height:140px;flex-shrink:0">
+                    <!-- LEFT: Allocation donut ─────────────────────────────── -->
+                    <div class="rounded-xl border bg-background p-4">
+                        <h3 class="font-bold text-sm mb-4">Financial Allocation</h3>
+                        <div v-if="pieData.length > 0" class="flex items-center gap-6">
+                            <svg viewBox="0 0 180 180" style="width:148px;height:148px;flex-shrink:0">
                                 <path v-for="(slice, i) in pieData" :key="i"
                                     :d="slice.path" :fill="slice.color"
                                     class="transition-opacity hover:opacity-75" />
-                                <text x="90" y="84" text-anchor="middle" fill="currentColor" fill-opacity="0.45" font-size="10">Total</text>
-                                <text x="90" y="100" text-anchor="middle" fill="currentColor" font-size="13" font-weight="bold">
-                                    {{ pieData.length }}
-                                </text>
-                                <text x="90" y="113" text-anchor="middle" fill="currentColor" fill-opacity="0.45" font-size="9">types</text>
+                                <text x="90" y="82" text-anchor="middle" fill="currentColor" fill-opacity="0.4" font-size="10">Allocation</text>
+                                <text x="90" y="98" text-anchor="middle" fill="currentColor" font-size="13" font-weight="bold">{{ pieData.length }}</text>
+                                <text x="90" y="111" text-anchor="middle" fill="currentColor" fill-opacity="0.4" font-size="9">categories</text>
                             </svg>
-                            <div class="space-y-2 text-xs flex-1 min-w-0">
-                                <div v-for="slice in pieData" :key="slice.label" class="flex items-center gap-2">
-                                    <span class="shrink-0 w-2.5 h-2.5 rounded-sm" :style="`background:${slice.color}`"></span>
-                                    <span class="text-muted-foreground">{{ slice.label }}</span>
-                                    <span class="ml-auto font-bold tabular-nums shrink-0">{{ slice.pct }}%</span>
-                                    <span class="text-muted-foreground tabular-nums shrink-0 text-[11px]">{{ fmt(slice.value) }}</span>
+                            <div class="space-y-3 flex-1 min-w-0">
+                                <div v-for="slice in pieData" :key="slice.label">
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="shrink-0 w-2.5 h-2.5 rounded-sm" :style="`background:${slice.color}`"></span>
+                                        <span class="text-muted-foreground flex-1 truncate">{{ slice.label }}</span>
+                                        <span class="font-bold tabular-nums shrink-0">{{ slice.pct }}%</span>
+                                    </div>
+                                    <p class="text-[11px] text-muted-foreground tabular-nums pl-4 mt-0.5">{{ fmt(slice.value) }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p v-else class="text-xs text-muted-foreground py-4 text-center">No allocation data for this period.</p>
+                    </div>
+
+                    <!-- RIGHT: Comparison panel ─────────────────────────────── -->
+                    <div class="space-y-3">
+
+                        <!-- 3 key metric chips -->
+                        <div class="grid grid-cols-3 gap-3">
+                            <div :class="['rounded-xl border p-3 text-center',
+                                ftSummary.net >= 0
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                                    : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800']">
+                                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Net Cash</p>
+                                <p class="text-base font-black leading-tight tabular-nums"
+                                    :class="ftSummary.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'">
+                                    {{ fmt(ftSummary.net) }}
+                                </p>
+                                <p class="text-[10px] text-muted-foreground mt-0.5">{{ ftSummary.net >= 0 ? 'Surplus' : 'Deficit' }}</p>
+                            </div>
+
+                            <div class="rounded-xl border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 p-3 text-center">
+                                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Payables Due</p>
+                                <p class="text-base font-black text-orange-600 leading-tight tabular-nums">{{ fmt(billsSummary?.total_due ?? 0) }}</p>
+                                <p class="text-[10px] text-muted-foreground mt-0.5">
+                                    {{ billsSummary?.count ?? 0 }} bill{{ (billsSummary?.count ?? 0) !== 1 ? 's' : '' }}
+                                </p>
+                            </div>
+
+                            <div class="rounded-xl border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 p-3 text-center">
+                                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Total Income</p>
+                                <p class="text-base font-black text-blue-600 leading-tight tabular-nums">{{ fmt(totalIncome) }}</p>
+                                <p class="text-[10px] text-muted-foreground mt-0.5">payments + adj.</p>
+                            </div>
+                        </div>
+
+                        <!-- Cash flow comparison bars -->
+                        <div class="rounded-xl border bg-background p-4 space-y-3">
+                            <h3 class="font-bold text-sm text-muted-foreground uppercase tracking-wide text-xs">Cash Flow Comparison</h3>
+                            <div v-for="bar in comparisonBars" :key="bar.label" class="space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">{{ bar.label }}</span>
+                                    <span class="font-semibold tabular-nums" :class="bar.textColor">{{ fmt(bar.value) }}</span>
+                                </div>
+                                <div class="h-2 rounded-full bg-muted overflow-hidden">
+                                    <div :class="['h-full rounded-full transition-all duration-500', bar.barColor]"
+                                        :style="`width:${bar.pct}%`" />
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Payments by Tender -->
-                    <div v-if="ftSummary.by_tender.length > 0" class="rounded-xl border bg-background p-4">
-                        <h3 class="font-bold text-sm mb-3">Payments by Tender</h3>
-                        <div class="space-y-2">
-                            <div v-for="row in ftSummary.by_tender" :key="row.tender"
-                                class="flex items-center justify-between rounded-lg bg-muted/40 px-4 py-3">
-                                <div>
-                                    <p class="text-sm font-semibold">{{ row.tender }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ row.count }} transaction{{ row.count !== 1 ? 's' : '' }}</p>
-                                </div>
-                                <p class="text-base font-bold text-green-600">{{ fmt(row.total) }}</p>
+                <!-- Payments by Tender (secondary detail) -->
+                <div v-if="ftSummary.by_tender.length > 0" class="rounded-xl border bg-background p-4">
+                    <h3 class="font-bold text-sm mb-3">Payments by Tender</h3>
+                    <div class="grid sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        <div v-for="row in ftSummary.by_tender" :key="row.tender"
+                            class="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5">
+                            <div>
+                                <p class="text-sm font-semibold">{{ row.tender }}</p>
+                                <p class="text-xs text-muted-foreground">{{ row.count }} txn{{ row.count !== 1 ? 's' : '' }}</p>
                             </div>
+                            <p class="text-sm font-bold text-green-600 tabular-nums">{{ fmt(row.total) }}</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Filters and actions bar -->
+        <!-- ── Filters and actions bar ──────────────────────────────────────── -->
         <div class="rounded-xl border bg-card shadow-sm p-4">
             <div class="flex flex-wrap gap-3 items-end">
                 <div>
@@ -338,7 +379,8 @@ onMounted(async () => {
                 </div>
                 <div>
                     <label class="text-xs font-medium text-muted-foreground block mb-1">Type</label>
-                    <select v-model="ftTypeFilter" @change="loadFinancial()" class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                    <select v-model="ftTypeFilter" @change="loadFinancial()"
+                        class="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="">All Types</option>
                         <option value="order">Order</option>
                         <option value="payment">Payment</option>
@@ -351,23 +393,25 @@ onMounted(async () => {
                     <label class="text-xs font-medium text-muted-foreground block mb-1">Search</label>
                     <div class="relative">
                         <Search class="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                        <input v-model="ftSearch" type="text" placeholder="Filter by description, type…"
-                            class="pl-8 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary w-56" />
+                        <input v-model="ftSearch" type="text" placeholder="Filter transactions…"
+                            class="pl-8 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary w-52" />
                     </div>
                 </div>
-                <button @click="showEntryForm = !showEntryForm" class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+                <button @click="showEntryForm = !showEntryForm"
+                    class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90">
                     <Plus class="h-3.5 w-3.5" /> Record Entry
                 </button>
             </div>
         </div>
 
-        <!-- Entry form -->
+        <!-- ── Entry form ────────────────────────────────────────────────────── -->
         <div v-if="showEntryForm" class="rounded-xl border bg-card shadow-sm p-4">
             <p class="text-sm font-bold mb-3">Record Expense or Income Adjustment</p>
             <div class="grid sm:grid-cols-2 gap-3">
                 <div>
                     <label class="text-xs font-medium text-muted-foreground block mb-1">Type *</label>
-                    <select v-model="entryForm.type" class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                    <select v-model="entryForm.type"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="expense">Expense</option>
                         <option value="income_adjustment">Income Adjustment</option>
                     </select>
@@ -402,7 +446,7 @@ onMounted(async () => {
             </div>
         </div>
 
-        <!-- Transactions table -->
+        <!-- ── Transactions table ─────────────────────────────────────────────── -->
         <div class="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div class="p-4 border-b flex items-center justify-between">
                 <h2 class="font-bold text-sm flex items-center gap-2"><DollarSign class="h-4 w-4" /> Transactions</h2>
@@ -474,14 +518,17 @@ onMounted(async () => {
 
             <!-- Pagination -->
             <div v-if="ftMeta && ftMeta.last_page > 1" class="p-4 border-t flex items-center justify-between">
-                <button @click="loadFinancial(ftPage - 1)" :disabled="ftPage === 1" class="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50">
+                <button @click="loadFinancial(ftPage - 1)" :disabled="ftPage === 1"
+                    class="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50">
                     <ChevronLeft class="h-4 w-4" /> Previous
                 </button>
                 <p class="text-xs text-muted-foreground">Page {{ ftPage }} of {{ ftMeta.last_page }}</p>
-                <button @click="loadFinancial(ftPage + 1)" :disabled="ftPage === ftMeta.last_page" class="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50">
+                <button @click="loadFinancial(ftPage + 1)" :disabled="ftPage === ftMeta.last_page"
+                    class="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50">
                     Next <ChevronRight class="h-4 w-4" />
                 </button>
             </div>
         </div>
+
     </div>
 </template>

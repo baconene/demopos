@@ -79,6 +79,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/financial-transactions/{financialTransaction}', [\App\Http\Controllers\Api\V1\FinancialTransactionController::class, 'destroy']);
 
         // Bills / Payables
+        Route::get('/bills/summary', [\App\Http\Controllers\Api\V1\BillController::class, 'summary']);
         Route::get('/bills/forecast', [\App\Http\Controllers\Api\V1\BillController::class, 'forecast']);
         Route::get('/bills', [\App\Http\Controllers\Api\V1\BillController::class, 'index']);
         Route::post('/bills', [\App\Http\Controllers\Api\V1\BillController::class, 'store']);
