@@ -94,6 +94,25 @@ const installmentStatusBadge = (s: string) => ({
     paid:       'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
 }[s] ?? 'bg-muted text-muted-foreground')
 
+// ── Chart helpers ──────────────────────────────────────────────────────────────
+const fmtShort = (v: number) => {
+    if (v >= 1_000_000) return `₱${(v / 1_000_000).toFixed(1)}M`
+    if (v >= 1_000) return `₱${(v / 1_000).toFixed(1)}K`
+    return `₱${v.toFixed(0)}`
+}
+
+const sortedInstallments = (bill: Bill) =>
+    [...bill.installments].sort((a, b) => a.installment_number - b.installment_number)
+
+const runningRemaining = (bill: Bill, upToNumber: number) => {
+    let rem = bill.amount
+    for (const inst of sortedInstallments(bill)) {
+        rem -= inst.amount
+        if (inst.installment_number === upToNumber) break
+    }
+    return Math.max(0, rem)
+}
+
 // ── Computed ───────────────────────────────────────────────────────────────────
 const monthlySummary = computed(() => {
     const multiplier: Record<string, number> = {
@@ -113,6 +132,58 @@ const annualSummary = computed(() => {
 
 const overdueBills = computed(() => bills.value.filter(b => b.status === 'overdue'))
 const dueSoonBills = computed(() => bills.value.filter(b => b.status === 'due_today' || b.status === 'upcoming'))
+
+const expandedBill = computed(() => bills.value.find(b => b.id === expandedBillId.value) ?? null)
+
+const burndownData = computed(() => {
+    const bill = expandedBill.value
+    if (!bill?.is_installment || !bill.installments.length) return null
+
+    const sorted = sortedInstallments(bill)
+    const total = bill.amount
+    const n = sorted.length
+    const plotW = 434  // 500 - 54(padL) - 12(padR)
+    const plotH = 118  // 160 - 14(padT) - 28(padB)
+
+    const toX = (v: number) => 54 + (v / n) * plotW
+    const toY = (v: number) => 14 + (1 - v / total) * plotH
+
+    type Pt = { n: number; rem: number; paid: boolean; svgX: number; svgY: number }
+    const pts: Pt[] = []
+    let rem = total
+    pts.push({ n: 0, rem: total, paid: true, svgX: toX(0), svgY: toY(total) })
+    for (const inst of sorted) {
+        rem = Math.max(0, rem - inst.amount)
+        pts.push({ n: inst.installment_number, rem, paid: !!inst.paid_at, svgX: toX(inst.installment_number), svgY: toY(rem) })
+    }
+
+    let splitIdx = 0
+    for (let i = 1; i < pts.length; i++) {
+        if (pts[i].paid) splitIdx = i
+    }
+
+    const toStr = (arr: Pt[]) => arr.map(p => `${p.svgX},${p.svgY}`).join(' ')
+    const paidPts = pts.slice(0, splitIdx + 1)
+    const unpaidPts = pts.slice(splitIdx)
+
+    const step = n <= 6 ? 1 : n <= 12 ? 2 : n <= 24 ? 4 : Math.ceil(n / 6)
+    const xTicks = pts
+        .filter(p => p.n === 0 || p.n % step === 0 || p.n === n)
+        .map(p => ({ n: p.n, x: p.svgX, label: p.n === 0 ? 'Start' : `#${p.n}` }))
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({
+        v: total * f, y: toY(total * f), label: fmtShort(total * f),
+    }))
+
+    return {
+        pts, paidPts, unpaidPts,
+        paidPolyStr: toStr(paidPts),
+        unpaidPolyStr: toStr(unpaidPts),
+        areaPoints: paidPts.length >= 2
+            ? `54,132 ${toStr(paidPts)} ${paidPts[paidPts.length - 1].svgX},132`
+            : '',
+        xTicks, yTicks,
+    }
+})
 
 // ── Actions ────────────────────────────────────────────────────────────────────
 const loadBills = async () => {
@@ -406,28 +477,103 @@ onMounted(async () => {
                             <tr v-if="expandedBillId === bill.id" :class="['border-t bg-muted/30']">
                                 <td :colspan="8" class="px-4 py-3">
                                     <div class="space-y-3">
-                                        <!-- Installments grid (if payment plan) -->
-                                        <div v-if="bill.is_installment && bill.installments.length > 0" class="space-y-2">
-                                            <p class="text-xs font-semibold text-muted-foreground">Installments</p>
-                                            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                                                <div v-for="inst in bill.installments" :key="inst.id" class="rounded-lg border p-3 bg-card/50">
-                                                    <div class="flex items-start justify-between">
-                                                        <div>
-                                                            <p class="text-xs font-bold">#{inst.installment_number}</p>
-                                                            <p class="text-sm font-semibold mt-1">{{ fmt(inst.amount) }}</p>
-                                                            <p class="text-xs text-muted-foreground mt-0.5">{{ inst.due_date }}</p>
-                                                        </div>
-                                                        <span :class="['px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap', installmentStatusBadge(inst.status)]">
-                                                            {{ inst.status }}
-                                                        </span>
-                                                    </div>
-                                                    <button v-if="!inst.paid_at && bill.is_active"
-                                                        @click="payInstallment(bill, inst)"
-                                                        :disabled="payingInstallmentId === inst.id"
-                                                        class="w-full mt-2 rounded bg-green-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50">
-                                                        {{ payingInstallmentId === inst.id ? 'Processing…' : 'Pay' }}
-                                                    </button>
+                                        <!-- Burndown chart (payment plans only) -->
+                                        <div v-if="bill.is_installment && bill.installments.length > 0 && burndownData" class="space-y-1.5">
+                                            <div class="flex items-center justify-between">
+                                                <p class="text-xs font-semibold text-muted-foreground">Payment Burndown</p>
+                                                <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                                                    <span class="flex items-center gap-1.5">
+                                                        <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="#22c55e" stroke-width="2.5"/></svg>
+                                                        Paid
+                                                    </span>
+                                                    <span class="flex items-center gap-1.5">
+                                                        <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4,2"/></svg>
+                                                        Remaining
+                                                    </span>
                                                 </div>
+                                            </div>
+                                            <div class="rounded-lg border bg-background p-2">
+                                                <svg viewBox="0 0 500 160" class="w-full" style="height:160px">
+                                                    <defs>
+                                                        <linearGradient id="bdPaidGrad" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25" />
+                                                            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02" />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <!-- Y-axis grid + labels -->
+                                                    <g v-for="tick in burndownData!.yTicks" :key="tick.v">
+                                                        <line :x1="54" :y1="tick.y" :x2="488" :y2="tick.y" stroke="currentColor" stroke-opacity="0.07" stroke-width="1" />
+                                                        <text :x="50" :y="tick.y + 3.5" text-anchor="end" fill="currentColor" fill-opacity="0.5" font-size="9">{{ tick.label }}</text>
+                                                    </g>
+                                                    <!-- X-axis labels -->
+                                                    <text v-for="tick in burndownData!.xTicks" :key="tick.n" :x="tick.x" y="155" text-anchor="middle" fill="currentColor" fill-opacity="0.5" font-size="9">{{ tick.label }}</text>
+                                                    <!-- Axes -->
+                                                    <line x1="54" y1="14" x2="54" y2="132" stroke="currentColor" stroke-opacity="0.15" stroke-width="1" />
+                                                    <line x1="54" y1="132" x2="488" y2="132" stroke="currentColor" stroke-opacity="0.15" stroke-width="1" />
+                                                    <!-- Paid area fill -->
+                                                    <polygon v-if="burndownData!.areaPoints" :points="burndownData!.areaPoints" fill="url(#bdPaidGrad)" />
+                                                    <!-- Remaining dashed line -->
+                                                    <polyline v-if="burndownData!.unpaidPts.length >= 2" :points="burndownData!.unpaidPolyStr" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round" />
+                                                    <!-- Paid solid line -->
+                                                    <polyline v-if="burndownData!.paidPts.length >= 2" :points="burndownData!.paidPolyStr" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                                                    <!-- Data points -->
+                                                    <circle v-for="pt in burndownData!.pts" :key="pt.n" :cx="pt.svgX" :cy="pt.svgY" r="3" :fill="pt.paid ? '#22c55e' : 'none'" :stroke="pt.paid ? '#16a34a' : '#94a3b8'" stroke-width="1.5" />
+                                                </svg>
+                                            </div>
+                                        </div>
+
+                                        <!-- Installment schedule table -->
+                                        <div v-if="bill.is_installment && bill.installments.length > 0" class="space-y-1.5">
+                                            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Installment Schedule</p>
+                                            <div class="rounded-lg border overflow-hidden">
+                                                <table class="w-full text-xs">
+                                                    <thead class="bg-muted/50 text-muted-foreground">
+                                                        <tr>
+                                                            <th class="px-3 py-2 text-left font-medium">#</th>
+                                                            <th class="px-3 py-2 text-right font-medium">Amount</th>
+                                                            <th class="px-3 py-2 text-left font-medium">Due Date</th>
+                                                            <th class="px-3 py-2 text-left font-medium">Status</th>
+                                                            <th class="px-3 py-2 text-left font-medium">Paid On</th>
+                                                            <th class="px-3 py-2 text-right font-medium">Balance After</th>
+                                                            <th class="px-3 py-2 text-center font-medium">Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr v-for="inst in sortedInstallments(bill)" :key="inst.id"
+                                                            :class="['border-t transition-colors', inst.paid_at ? 'bg-green-50/50 dark:bg-green-950/10' : '']">
+                                                            <td class="px-3 py-2.5 font-bold text-muted-foreground">#{{ inst.installment_number }}</td>
+                                                            <td class="px-3 py-2.5 text-right font-semibold tabular-nums">{{ fmt(inst.amount) }}</td>
+                                                            <td class="px-3 py-2.5 tabular-nums">{{ inst.due_date }}</td>
+                                                            <td class="px-3 py-2.5">
+                                                                <span :class="['px-2 py-0.5 rounded-full text-xs font-medium', installmentStatusBadge(inst.status)]">
+                                                                    {{ inst.status.replace(/_/g, ' ') }}
+                                                                </span>
+                                                            </td>
+                                                            <td class="px-3 py-2.5 text-muted-foreground tabular-nums">{{ inst.paid_at ? fmtDatetime(inst.paid_at) : '—' }}</td>
+                                                            <td class="px-3 py-2.5 text-right tabular-nums font-medium"
+                                                                :class="runningRemaining(bill, inst.installment_number) === 0 ? 'text-green-600' : 'text-orange-600'">
+                                                                {{ fmt(runningRemaining(bill, inst.installment_number)) }}
+                                                            </td>
+                                                            <td class="px-3 py-2.5 text-center">
+                                                                <span v-if="inst.paid_at" class="text-green-600 font-bold">✓</span>
+                                                                <button v-else-if="bill.is_active"
+                                                                    @click="payInstallment(bill, inst)"
+                                                                    :disabled="payingInstallmentId === inst.id"
+                                                                    class="rounded bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50">
+                                                                    {{ payingInstallmentId === inst.id ? '…' : 'Pay' }}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                    <tfoot class="border-t bg-muted/30">
+                                                        <tr>
+                                                            <td colspan="4" class="px-3 py-2 text-muted-foreground">{{ bill.installments_paid }}/{{ bill.installment_count }} paid</td>
+                                                            <td class="px-3 py-2 text-right font-bold text-green-600">Paid: {{ fmt(bill.installments.filter(i => i.paid_at).reduce((s, i) => s + i.amount, 0)) }}</td>
+                                                            <td class="px-3 py-2 text-right font-bold text-orange-600">{{ fmt(bill.installments.filter(i => !i.paid_at).reduce((s, i) => s + i.amount, 0)) }} left</td>
+                                                            <td></td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
                                             </div>
                                         </div>
 
